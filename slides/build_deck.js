@@ -85,7 +85,7 @@ function barChart(slide, spec, o) {
     barDir: "col", barGrouping: "clustered", chartColors: series.map(x => x.color || ORIG), showLegend: series.length > 1,
     legendPos: "t", legendFontSize: 11, legendFontFace: "+mn-lt", showValue: true, dataLabelPosition: "outEnd",
     dataLabelFontSize: 10, dataLabelFontFace: "+mn-lt", dataLabelColor: HEX.dk2, dataLabelFormatCode: fmt,
-    valAxisMinVal: 0, valAxisMaxVal: spec.max || 1, valAxisLabelFormatCode: fmt, valAxisLabelFontSize: 10,
+    valAxisMinVal: spec.min ?? 0, valAxisMaxVal: spec.max || 1, valAxisLabelFormatCode: fmt, valAxisLabelFontSize: 10,
     catAxisLabelFontSize: 11, valAxisLabelFontFace: "+mn-lt", catAxisLabelFontFace: "+mn-lt", catAxisLabelColor: HEX.dk2,
     valAxisLabelColor: HEX.accent5, valGridLine: { color: "E3E6E8", size: 0.75 }, catGridLine: { style: "none" },
     barGapWidthPct: 60, showTitle: !!spec.title, title: spec.title || "", titleFontSize: 12, titleColor: HEX.dk2,

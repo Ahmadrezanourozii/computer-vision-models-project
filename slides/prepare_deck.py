@@ -147,10 +147,38 @@ def main():
                                dict(name="Mooney", values=[M["by_light_shadow_mooney"].get(l, 0) for l in LIGHTS], color="moon")]),
             takeaway=M.get("takeaway", "")))
 
-    # --- summary
-    summ = S.get("summary_slide")
-    if summ:
-        deck["summary"] = summ
+    # --- light-from-above slide (H2) and summary
+    Hh = S.get("human")
+    if Hh and V and F and D and M:
+        mo_face = V.get("mooney_says_face_by_light", {})
+        mo_mention = V.get("mooney_mentions_face_by_light", {})
+        deck["light_slide"] = dict(
+            title="Light from below: no face for humans or machines",
+            chart=dict(title="Mooney images: evidence for a face, by light direction", labels=["above", "left", "right", "below"],
+                       fmt="0%", max=1, series=[
+                           dict(name="Human: 'probably/clearly a face' (rating ≥ 4)",
+                                values=[Hh["face_share_by_light"][l] for l in ["top", "left", "right", "bottom"]], color="dark"),
+                           dict(name="Qwen3-VL: 'contains a face'", values=[mo_face.get(l, 0) for l in ["top", "left", "right", "bottom"]],
+                                color="moon"),
+                           dict(name="Qwen3-VL: face/head/person in free description",
+                                values=[mo_mention.get(l, 0) for l in ["top", "left", "right", "bottom"]], color="teal"),
+                       ]),
+            points=Hh.get("points", []), takeaway=Hh.get("takeaway", ""))
+        corr = Hh["corr_with_human"]
+        names = [k for k in corr if corr[k]["rho"] is not None]
+        deck["summary"] = dict(
+            title=S.get("summary_title", "Summary: only the VLM partly follows human Mooney perception"),
+            main=dict(title="Original vs. Mooney (all 100 images)", fmt="0%", max=1,
+                      labels=["Face detected (SCRFD)", "VLM: 'a face'", "Black = shadow (VLM)", "Shadow index (Marigold)"],
+                      series=[dict(name="Original", color="orig", values=[F["det_rate_orig"], vo.get("says_face", 0),
+                                                                          vo.get("black_is_shadow", 0), M["shadow_index_orig"]]),
+                              dict(name="Mooney", color="moon", values=[F["det_rate_mooney"], vm.get("says_face", 0),
+                                                                        vm.get("black_is_shadow", 0), M["shadow_index_mooney"]])]),
+            by_light=dict(title="Spearman ρ with the human rating (per Mooney image)", fmt="0.00", max=1, min=-0.4,
+                          labels=[n.replace("ArcFace similarity to original", "ArcFace sim.").replace("SCRFD detection score", "SCRFD score")
+                                  .replace("VLM face confidence", "VLM confidence").replace("Depth agreement r", "Depth r") for n in names],
+                          series=[dict(name="ρ", color="dark", values=[round(corr[n]["rho"], 3) for n in names])]),
+            takeaway=S.get("summary_takeaway", ""))
 
     deck.update(
         shot_gui=str(shots / "gui_image.png"), shot_cli=str(shots / "cli_batch.png"), shot_code=str(shots / "code.png"),

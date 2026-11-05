@@ -178,7 +178,7 @@ def build_app(blur_default=1.5, white_default=40.0):
                     with gr.Row():
                         g_gray = gr.Image(label="1) Grayscale", height=300, interactive=False)
                         g_blur = gr.Image(label="2) Blurred", height=300, interactive=False)
-                        g_moon = gr.Image(label="3) Mooney (download with the arrow)", height=300, type="numpy",
+                        g_moon = gr.Image(label="3) Mooney", height=300, type="numpy",
                                           interactive=False, format="png")
                     info = gr.Markdown()
                     hist = gr.Plot(label="Luminance histogram and threshold")
