@@ -83,7 +83,7 @@ function barChart(slide, spec, o) {
   const fmt = spec.fmt || "0%";
   slide.addChart(pres.charts.BAR, data, Object.assign({
     barDir: "col", barGrouping: "clustered", chartColors: series.map(x => x.color || ORIG), showLegend: series.length > 1,
-    legendPos: "t", legendFontSize: 11, legendFontFace: "+mn-lt", showValue: true, dataLabelPosition: "outEnd",
+    legendPos: spec.legend || "t", legendFontSize: 11, legendFontFace: "+mn-lt", showValue: true, dataLabelPosition: "outEnd",
     dataLabelFontSize: 10, dataLabelFontFace: "+mn-lt", dataLabelColor: HEX.dk2, dataLabelFormatCode: fmt,
     valAxisMinVal: spec.min ?? 0, valAxisMaxVal: spec.max || 1, valAxisLabelFormatCode: fmt, valAxisLabelFontSize: 10,
     catAxisLabelFontSize: 11, valAxisLabelFontFace: "+mn-lt", catAxisLabelFontFace: "+mn-lt", catAxisLabelColor: HEX.dk2,
@@ -161,14 +161,16 @@ function colorize(spec) { if (spec && spec.series) spec.series.forEach(x => { x.
     fill: { color: HEX.dk2 }, isTextBox: true });
   s.addText("Mooney", { x: MX - 0.02, y: y2 - 0.02, w: 1, h: 0.25, fontSize: 9, bold: true, color: HEX.dk1, margin: 0.03,
     fill: { color: HEX.accent1 }, isTextBox: true });
+  if (IN.top10_note) s.addText(IN.top10_note, { x: MX, y: y2 + ts + 0.45, w: W - 2 * MX, h: 0.55, fontSize: 12.5, italic: true,
+    color: HEX.dk2, margin: 0, valign: "top", isTextBox: true });
   const tc = IN.top10_criteria || [];
   const cw = (W - 2 * MX - (tc.length - 1) * 0.3) / Math.max(1, tc.length);
   tc.forEach((c, i) => {
     const x = MX + i * (cw + 0.3);
-    card(s, x, 5.05, cw, 1.75);
-    s.addText(c.head, { x: x + 0.25, y: 5.15, w: cw - 0.5, h: 0.4, fontSize: 14, bold: true, color: HEX.dk1,
+    card(s, x, 5.35, cw, 1.35);
+    s.addText(c.head, { x: x + 0.25, y: 5.45, w: cw - 0.5, h: 0.4, fontSize: 14, bold: true, color: HEX.dk1,
       fontFace: THEME.headFontFace, margin: 0, isTextBox: true });
-    s.addText(c.text, { x: x + 0.25, y: 5.55, w: cw - 0.5, h: 1.15, fontSize: 12, color: HEX.dk2, margin: 0, valign: "top",
+    s.addText(c.text, { x: x + 0.25, y: 5.85, w: cw - 0.5, h: 0.8, fontSize: 12, color: HEX.dk2, margin: 0, valign: "top",
       isTextBox: true });
   });
 }
@@ -235,7 +237,7 @@ if (IN.summary) {
   s.addText(IN.summary.title, { placeholder: "title" });
   barChart(s, colorize(IN.summary.main), { x: MX - 0.1, y: 1.4, w: 7.4, h: 4.5 });
   if (IN.summary.by_light) barChart(s, colorize(IN.summary.by_light), { x: 7.75, y: 1.4, w: W - MX - 7.75, h: 4.5,
-    showValue: false });
+    showValue: !!IN.summary.by_light.show_values });
   card(s, MX, 6.0, W - 2 * MX, 0.82, "FFF4E2");
   s.addText(IN.summary.takeaway, { x: MX + 0.25, y: 6.0, w: W - 2 * MX - 0.5, h: 0.82, fontSize: 13.5, color: HEX.dk1,
     margin: 0, valign: "middle", isTextBox: true });
@@ -246,10 +248,12 @@ if (IN.summary) {
   const s = pres.addSlide({ masterName: "CONTENT" });
   tag(s, "Screenshot of the tool");
   s.addText("The Mooney tool: GUI with live controls + batch CLI", { placeholder: "title" });
-  imgFit(s, IN.shot_gui, MX, 1.4, 8.3, 5.3, { line: { color: "D5D9DD", width: 0.75 } });
-  imgFit(s, IN.shot_cli, MX + 8.55, 1.4, W - 2 * MX - 8.55, 3.3, { line: { color: "D5D9DD", width: 0.75 } });
-  s.addText(IN.tool_text, { x: MX + 8.55, y: 4.85, w: W - 2 * MX - 8.55, h: 1.9, fontSize: 12, color: HEX.dk2, margin: 0,
-    valign: "top", isTextBox: true, paraSpaceAfter: 4 });
+  imgFit(s, IN.shot_gui, MX, 1.4, 7.9, 4.95, { line: { color: "D5D9DD", width: 0.75 } });
+  const rx = MX + 8.15, rw = W - MX - rx;
+  imgFit(s, IN.shot_cli, rx, 1.4, rw, 2.0, { line: { color: "D5D9DD", width: 0.75 } });
+  imgFit(s, IN.shot_batch, rx, 3.55, rw, 2.8, { line: { color: "D5D9DD", width: 0.75 } });
+  s.addText(IN.tool_text, { x: MX, y: 6.45, w: W - 2 * MX, h: 0.45, fontSize: 12, color: HEX.dk2, margin: 0,
+    valign: "top", isTextBox: true });
 }
 
 // ---------------------------------------------------------------- 11 code screenshot
@@ -270,14 +274,14 @@ if (IN.summary) {
   const cw = (W - 2 * MX - 0.3) / 2;
   IN.ai_cols.forEach((c, i) => {
     const x = MX + i * (cw + 0.3);
-    card(s, x, 1.5, cw, 4.6, "1E2124");
+    card(s, x, 1.5, cw, 3.9, "1E2124");
     s.addText(c.head, { x: x + 0.3, y: 1.7, w: cw - 0.6, h: 0.45, fontSize: 17, bold: true, color: HEX.accent1,
       fontFace: THEME.headFontFace, margin: 0, isTextBox: true });
     s.addText(c.lines.map((t, k) => ({ text: t, options: { bullet: true, breakLine: k < c.lines.length - 1 } })),
-      { x: x + 0.3, y: 2.3, w: cw - 0.6, h: 3.65, fontSize: 13, color: "E3E6E8", valign: "top", paraSpaceAfter: 6, margin: 0,
+      { x: x + 0.3, y: 2.3, w: cw - 0.6, h: 2.95, fontSize: 13.5, color: "E3E6E8", valign: "top", paraSpaceAfter: 8, margin: 0,
         isTextBox: true });
   });
-  s.addText(IN.ai_note, { x: MX, y: 6.3, w: W - 2 * MX, h: 0.5, fontSize: 12, color: "C9CED3", margin: 0, isTextBox: true });
+  s.addText(IN.ai_note, { x: MX, y: 5.65, w: W - 2 * MX, h: 0.6, fontSize: 12.5, color: "C9CED3", margin: 0, isTextBox: true });
 }
 
 // ---------------------------------------------------------------- 13 references

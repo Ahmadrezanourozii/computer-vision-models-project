@@ -181,7 +181,7 @@ def main():
         rows = [[data / "Original" / f"{k}.jpg", res / "Result4/Original" / f"{k}_normals.jpg",
                  res / "Result4/Original" / f"{k}_albedo.jpg", res / "Result4/Original" / f"{k}_shading.jpg",
                  data / "Mooney" / f"{k}.png", res / "Result4/Mooney" / f"{k}_normals.jpg",
-                 res / "Result4/Mooney" / f"{k}_albedo.jpg", res / "Result4/Mooney" / f"{k}_shading.jpg"] for k in ex[:2]]
+                 res / "Result4/Mooney" / f"{k}_albedo.jpg", res / "Result4/Mooney" / f"{k}_shading.jpg"] for k in ex[:2] + ex[3:4]]
         panel(rows, ["Original", "Normals", "Albedo", "Shading", "Mooney", "Normals", "Albedo", "Shading"], None,
               out / "marigold_examples.png", size=240)
 
