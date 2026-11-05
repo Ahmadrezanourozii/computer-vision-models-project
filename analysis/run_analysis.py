@@ -100,6 +100,8 @@ def main():
     ap.add_argument("--results", required=True, help="folder with Result1..Result4")
     ap.add_argument("--out", required=True)
     ap.add_argument("--examples", nargs="*", default=None, help="image ids used in example panels")
+    ap.add_argument("--ratings", default=None, help="JSON with blind human ratings {'blind': {id: 1-5}}")
+    ap.add_argument("--ratings-v1", default=None, help="ratings of the first Mooney version (optional)")
     a = ap.parse_args()
     data, res, out = Path(a.data), Path(a.results), Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -182,6 +184,50 @@ def main():
                  res / "Result4/Mooney" / f"{k}_albedo.jpg", res / "Result4/Mooney" / f"{k}_shading.jpg"] for k in ex[:2]]
         panel(rows, ["Original", "Normals", "Albedo", "Shading", "Mooney", "Normals", "Albedo", "Shading"], None,
               out / "marigold_examples.png", size=240)
+
+    # ---------------- human (blind ratings) vs. machines, per image (Paper 1 style trial-level correlation)
+    if a.ratings:
+        from scipy.stats import spearmanr
+        hum = pd.Series(json.load(open(a.ratings))["blind"], dtype=float)
+        lab = meta.set_index("id")
+        H = dict(n=int(hum.size), mean_by_light={l: float(hum[lab.loc[hum.index, "light"] == l].mean()) for l in LIGHTS},
+                 face_share_by_light={l: float((hum[lab.loc[hum.index, "light"] == l] >= 4).mean()) for l in LIGHTS},
+                 face_share=float((hum >= 4).mean()), seen_share=float((hum >= 3).mean()))
+        if a.ratings_v1:
+            h1 = pd.Series(json.load(open(a.ratings_v1))["blind"], dtype=float)
+            H["v1_mean_by_light"] = {l: float(h1[lab.loc[h1.index, "light"] == l].mean()) for l in LIGHTS}
+            H["v1_face_share"] = float((h1 >= 4).mean())
+        scores = pd.DataFrame(index=hum.index)
+        if "vlm" in S:
+            tm = vlm_table(res / "Result2")["Mooney"]
+            scores["VLM face confidence"] = tm["face_confidence"]
+            scores["VLM says 'face'"] = (tm["contains_face"] == "yes").astype(float)
+        if "faces" in S:
+            sm = pd.read_csv(res / "Result3/Mooney/summary.csv").set_index("image")
+            scores["SCRFD detection score"] = sm["best_score"]
+            sim = pd.Series(dict(zip(ids, s_or)))
+            scores["ArcFace similarity to original"] = sim
+        if "depth" in S:
+            scores["Depth agreement r"] = dm.set_index("id")["depth_r"]
+        if "marigold" in S:
+            scores["Shadow index"] = mg.set_index("id")["shadow_index_mooney"]
+        rng = np.random.default_rng(0)
+        corr = {}
+        for c in scores.columns:
+            x = pd.concat([hum, scores[c]], axis=1).dropna().values
+            if len(x) < 10 or np.std(x[:, 1]) == 0:
+                corr[c] = dict(rho=None, lo=None, hi=None, n=int(len(x)))
+                continue
+            rho = spearmanr(x[:, 0], x[:, 1])[0]
+            boots = []
+            for _ in range(2000):
+                i = rng.integers(0, len(x), len(x))
+                if np.std(x[i, 1]) > 0 and np.std(x[i, 0]) > 0:
+                    boots.append(spearmanr(x[i, 0], x[i, 1])[0])
+            corr[c] = dict(rho=float(rho), lo=float(np.percentile(boots, 2.5)), hi=float(np.percentile(boots, 97.5)), n=int(len(x)))
+        H["corr_with_human"] = corr
+        pd.concat([hum.rename("human_rating"), lab["light"], scores], axis=1).to_csv(out / "human_vs_machine_per_image.csv")
+        S["human"] = H
 
     json.dump(S, open(out / "summary.json", "w"), indent=1, default=float)
     print(json.dumps(S, indent=1, default=float)[:3000])
