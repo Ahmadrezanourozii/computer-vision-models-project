@@ -61,7 +61,8 @@ def main():
                 dets.append(dict(det_score=float(x.det_score), bbox=x.bbox.tolist(), kps=x.kps.tolist(),
                                  landmark_2d_106=x.landmark_2d_106.tolist() if x.get("landmark_2d_106") is not None else None,
                                  pose_pitch_yaw_roll=x.pose.tolist() if x.get("pose") is not None else None,
-                                 sex=x.get("sex"), age=int(x.age) if x.get("age") is not None else None))
+                                 sex=(x.sex if x.get("gender") is not None else None),
+                                 age=int(x.age) if x.get("age") is not None else None))
             if faces:
                 emb[f.stem] = faces[0].normed_embedding.astype(np.float32)
             if name == "Original" and faces:

@@ -16,3 +16,4 @@ outputs/
 submission/
 *.zip
 kaggle/**/output/
+results/
