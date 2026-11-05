@@ -18,8 +18,8 @@ from metrics import depth_metrics, face_metrics, marigold_metrics, vlm_metrics, 
 LIGHTS = ["left", "right", "top", "bottom"]
 
 
-def font(size):
-    for n in ("DejaVuSans-Bold.ttf", "DejaVuSans.ttf"):
+def font(size, bold=True):
+    for n in (("DejaVuSans-Bold.ttf", "DejaVuSans.ttf") if bold else ("DejaVuSans.ttf",)):
         try:
             return ImageFont.truetype(n, size)
         except OSError:
@@ -51,6 +51,45 @@ def panel(rows, col_titles, row_titles, out, size=300, gap=8):
     return out
 
 
+def wrap(d, text, font_, width):
+    words, lines, cur = text.split(), [], ""
+    for w in words:
+        t = (cur + " " + w).strip()
+        if d.textlength(t, font=font_) <= width:
+            cur = t
+        else:
+            lines.append(cur)
+            cur = w
+    if cur:
+        lines.append(cur)
+    return lines
+
+
+def vlm_panel(rows, out, size=230, text_w=760):
+    """rows: list of (image_path, label, text) -> image with thumbnail + wrapped description per row."""
+    f_lab, f_txt = font(22), font(21, bold=False)
+    tmp = ImageDraw.Draw(Image.new("RGB", (10, 10)))
+    blocks = [(p, lab, wrap(tmp, txt, f_txt, text_w)[:6]) for p, lab, txt in rows]
+    H = sum(max(size, 40 + 28 * len(l)) + 18 for *_, l in blocks)
+    im = Image.new("RGB", (size + 30 + text_w, H), "white")
+    d = ImageDraw.Draw(im)
+    y = 0
+    for p, lab, lines in blocks:
+        im.paste(tile(p, size), (0, y))
+        d.text((size + 24, y + 2), lab, fill=(185, 120, 26) if lab.startswith("Mooney") else (40, 40, 40), font=f_lab)
+        for i, ln in enumerate(lines):
+            d.text((size + 24, y + 36 + 28 * i), ln, fill=(45, 47, 51), font=f_txt)
+        y += max(size, 40 + 28 * len(lines)) + 18
+    im.save(out)
+    return out
+
+
+def first_sentences(t, n=2):
+    import re
+    parts = re.split(r"(?<=[.!?])\s+", t.strip())
+    return " ".join(parts[:n])
+
+
 def by_light(df, col):
     return {l: float(df.loc[df.light == l, col].mean()) for l in LIGHTS if (df.light == l).any()}
 
@@ -78,6 +117,8 @@ def main():
                           r_pattern_mooney=dm.r_mooneydepth_vs_pattern.abs().mean(),
                           r_pattern_orig=dm.r_origdepth_vs_pattern.abs().mean(),
                           by_light_r=by_light(dm, "depth_r"), by_light_partial=by_light(dm, "partial_r_pattern"),
+                          by_light_pattern_orig={l: float(dm.loc[dm.light == l, "r_origdepth_vs_pattern"].abs().mean()) for l in LIGHTS},
+                          by_light_pattern_mooney={l: float(dm.loc[dm.light == l, "r_mooneydepth_vs_pattern"].abs().mean()) for l in LIGHTS},
                           hist_r=np.histogram(dm.depth_r, bins=10, range=(-1, 1))[0].tolist())
         rows = [[data / "Original" / f"{k}.jpg", res / "Result1/Original" / f"{k}_depth.png",
                  res / "Result1/Original" / f"{k}_relief.png", data / "Mooney" / f"{k}.png",
@@ -102,6 +143,11 @@ def main():
                         .value_counts().head(8).to_dict(),
                         examples={k: dict(orig=tabs["Original"].loc[k, "description"], mooney=tabs["Mooney"].loc[k, "description"])
                                   for k in ex if k in tabs["Mooney"].index})
+        vrows = []
+        for k in ex[:2]:
+            vrows += [(data / "Original" / f"{k}.jpg", "Original - Qwen3-VL:", first_sentences(tabs["Original"].loc[k, "description"])),
+                      (data / "Mooney" / f"{k}.png", "Mooney - Qwen3-VL:", first_sentences(tabs["Mooney"].loc[k, "description"]))]
+        vlm_panel(vrows, out / "vlm_examples.png")
 
     # ---------------- system 3: faces
     if (res / "Result3").exists():

@@ -76,17 +76,24 @@ function imgFit(slide, p, x, y, w, h, extra = {}) {   // keep aspect ratio insid
   if (sz) { const r = sz[0] / sz[1]; if (w / h > r) { ww = h * r; } else { hh = w / r; } }
   slide.addImage({ path: p, x: x + (w - ww) / 2, y: y + (h - hh) / 2, w: ww, h: hh, ...extra });
 }
-function barChart(slide, labels, orig, moon, o) {
-  const data = [{ name: "Original", labels, values: orig }, { name: "Mooney", labels, values: moon }];
+function barChart(slide, spec, o) {
+  // spec: {labels, series:[{name, values, color}], fmt, max, title}  (legacy: orig/moon arrays)
+  const series = spec.series || [{ name: "Original", values: spec.orig, color: ORIG }, { name: "Mooney", values: spec.moon, color: MOON }];
+  const data = series.map(x => ({ name: x.name, labels: spec.labels, values: x.values }));
+  const fmt = spec.fmt || "0%";
   slide.addChart(pres.charts.BAR, data, Object.assign({
-    barDir: "col", barGrouping: "clustered", chartColors: [ORIG, MOON], showLegend: true, legendPos: "t",
-    legendFontSize: 11, legendFontFace: "+mn-lt", showValue: true, dataLabelPosition: "outEnd", dataLabelFontSize: 10,
-    dataLabelFontFace: "+mn-lt", dataLabelColor: HEX.dk2, dataLabelFormatCode: "0%",
-    valAxisMinVal: 0, valAxisMaxVal: 1, valAxisLabelFormatCode: "0%", valAxisLabelFontSize: 10, catAxisLabelFontSize: 11,
-    valAxisLabelFontFace: "+mn-lt", catAxisLabelFontFace: "+mn-lt", catAxisLabelColor: HEX.dk2, valAxisLabelColor: HEX.accent5,
-    valGridLine: { color: "E3E6E8", size: 0.75 }, catGridLine: { style: "none" }, barGapWidthPct: 60,
+    barDir: "col", barGrouping: "clustered", chartColors: series.map(x => x.color || ORIG), showLegend: series.length > 1,
+    legendPos: "t", legendFontSize: 11, legendFontFace: "+mn-lt", showValue: true, dataLabelPosition: "outEnd",
+    dataLabelFontSize: 10, dataLabelFontFace: "+mn-lt", dataLabelColor: HEX.dk2, dataLabelFormatCode: fmt,
+    valAxisMinVal: 0, valAxisMaxVal: spec.max || 1, valAxisLabelFormatCode: fmt, valAxisLabelFontSize: 10,
+    catAxisLabelFontSize: 11, valAxisLabelFontFace: "+mn-lt", catAxisLabelFontFace: "+mn-lt", catAxisLabelColor: HEX.dk2,
+    valAxisLabelColor: HEX.accent5, valGridLine: { color: "E3E6E8", size: 0.75 }, catGridLine: { style: "none" },
+    barGapWidthPct: 60, showTitle: !!spec.title, title: spec.title || "", titleFontSize: 12, titleColor: HEX.dk2,
+    titleFontFace: "+mn-lt",
   }, o));
 }
+const COLORS = { orig: ORIG, moon: MOON, dark: HEX.dk2, teal: HEX.accent3, grey: HEX.accent5, red: HEX.accent4 };
+function colorize(spec) { if (spec && spec.series) spec.series.forEach(x => { x.color = COLORS[x.color] || x.color || ORIG; }); return spec; }
 
 // ---------------------------------------------------------------- 1 title
 {
@@ -196,9 +203,7 @@ function resultSlide(r, idx) {
   const rx = MX + lw + 0.35, rw = W - MX - rx;
   (r.stats || []).forEach((st, i) => stat(s, rx + i * (rw / r.stats.length), 1.45, rw / r.stats.length - 0.15, st.big, st.label,
     st.color === "moon" ? "B9781A" : HEX.dk1));
-  if (r.chart) barChart(s, r.chart.labels, r.chart.orig, r.chart.moon, { x: rx - 0.1, y: 2.85, w: rw + 0.1, h: 2.95,
-    showTitle: true, title: r.chart.title, titleFontSize: 12, titleColor: HEX.dk2, titleFontFace: "+mn-lt",
-    valAxisMaxVal: r.chart.max || 1, dataLabelFormatCode: r.chart.fmt || "0%", valAxisLabelFormatCode: r.chart.fmt || "0%" });
+  if (r.chart) barChart(s, colorize(r.chart), { x: rx - 0.1, y: 2.85, w: rw + 0.1, h: 2.95 });
   card(s, MX, 6.0, W - 2 * MX, 0.82, "FFF4E2");
   s.addText(r.takeaway, { x: MX + 0.25, y: 6.0, w: W - 2 * MX - 0.5, h: 0.82, fontSize: 13.5, color: HEX.dk1, margin: 0,
     valign: "middle", isTextBox: true });
@@ -211,19 +216,9 @@ if (IN.summary) {
   const s = pres.addSlide({ masterName: "CONTENT" });
   tag(s, "Results · all systems");
   s.addText(IN.summary.title, { placeholder: "title" });
-  barChart(s, IN.summary.labels, IN.summary.orig, IN.summary.moon, { x: MX - 0.1, y: 1.4, w: 7.4, h: 4.5,
-    showTitle: true, title: IN.summary.chart_title, titleFontSize: 12, titleColor: HEX.dk2, titleFontFace: "+mn-lt" });
-  const bl = IN.summary.by_light;
-  if (bl) {
-    const data = bl.series.map(x => ({ name: x.name, labels: bl.labels, values: x.values }));
-    s.addChart(pres.charts.BAR, data, { x: 7.75, y: 1.4, w: W - MX - 7.75, h: 4.5, barDir: "col", barGrouping: "clustered",
-      chartColors: ["B9781A", HEX.accent3, HEX.accent5, HEX.dk2].slice(0, data.length), showLegend: true, legendPos: "t",
-      legendFontSize: 10, legendFontFace: "+mn-lt", showValue: false, valAxisMinVal: 0, valAxisMaxVal: bl.max || 1,
-      valAxisLabelFormatCode: bl.fmt || "0%", valAxisLabelFontSize: 10, catAxisLabelFontSize: 11, valAxisLabelFontFace: "+mn-lt",
-      catAxisLabelFontFace: "+mn-lt", catAxisLabelColor: HEX.dk2, valAxisLabelColor: HEX.accent5,
-      valGridLine: { color: "E3E6E8", size: 0.75 }, catGridLine: { style: "none" }, showTitle: true, title: bl.title,
-      titleFontSize: 12, titleColor: HEX.dk2, titleFontFace: "+mn-lt" });
-  }
+  barChart(s, colorize(IN.summary.main), { x: MX - 0.1, y: 1.4, w: 7.4, h: 4.5 });
+  if (IN.summary.by_light) barChart(s, colorize(IN.summary.by_light), { x: 7.75, y: 1.4, w: W - MX - 7.75, h: 4.5,
+    showValue: false });
   card(s, MX, 6.0, W - 2 * MX, 0.82, "FFF4E2");
   s.addText(IN.summary.takeaway, { x: MX + 0.25, y: 6.0, w: W - 2 * MX - 0.5, h: 0.82, fontSize: 13.5, color: HEX.dk1,
     margin: 0, valign: "middle", isTextBox: true });
