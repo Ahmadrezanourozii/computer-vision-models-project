@@ -1,0 +1,18 @@
+# secrets
+.secrets/
+*.token
+kaggle.json
+access_token
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+# large / generated data (kept out of git; delivered via the submission zip)
+data/
+work/
+runs/
+outputs/
+submission/
+*.zip
+kaggle/**/output/
