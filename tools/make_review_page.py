@@ -62,7 +62,9 @@ h1{font:800 clamp(28px,4vw,40px)/1.05 var(--display);margin:0;text-wrap:balance;
 .q{font:700 20px/1.25 var(--display)}
 .btn{font:600 15px var(--body);padding:13px 16px;border-radius:12px;border:1.5px solid var(--line);background:var(--tile);color:var(--ink);cursor:pointer;text-align:left;display:flex;justify-content:space-between;align-items:center}
 .btn kbd{font:500 12px var(--mono);color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:1px 6px}
-.btn.face{border-color:var(--good)} .btn.none{border-color:var(--bad)}
+.scale{display:grid;gap:8px}
+.btn.r5,.btn.r4{border-color:var(--good)} .btn.r1,.btn.r2{border-color:var(--bad)}
+.btn.chosen{background:var(--amber-soft);border-color:var(--amber)}
 .btn:hover{background:var(--amber-soft)}
 .nav{display:flex;gap:8px}
 .nav .btn{flex:1;justify-content:center;padding:9px}
@@ -84,7 +86,8 @@ h1{font:800 clamp(28px,4vw,40px)/1.05 var(--display);margin:0;text-wrap:balance;
 .card button{font:600 13px var(--body);border:none;background:var(--ink);color:var(--paper);border-radius:8px;padding:6px 10px;cursor:pointer}
 .card.sel button{background:var(--amber);color:#111}
 .blindmark{font:500 11px var(--mono)}
-.blindmark.face{color:var(--good)} .blindmark.none{color:var(--bad)} .blindmark.unsure{color:var(--muted)}
+.blindmark.r4,.blindmark.r5{color:var(--good)} .blindmark.r1,.blindmark.r2{color:var(--bad)} .blindmark.r3{color:var(--muted)}
+.sortbar{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .fallback{border:1px dashed var(--line);border-radius:12px;padding:12px;display:grid;gap:8px}
 .fallback textarea{width:100%;min-height:90px;font:12px var(--mono);background:var(--tile);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px}
 @media (max-width:760px){.blind{grid-template-columns:1fr}}
@@ -93,7 +96,7 @@ h1{font:800 clamp(28px,4vw,40px)/1.05 var(--display);margin:0;text-wrap:balance;
 <main>
   <header>
     <h1>Mooney Review</h1>
-    <p class="lede">Step 1 is blind: you see only the two-tone image and decide whether you see a face. Step 2 reveals the photographs so you can pick the ten best Mooney images for the slides. Answers save automatically.</p>
+    <p class="lede">Step 1 is blind: you see only the two-tone image and rate how clearly you see a face. Step 2 reveals the photographs (left: Mooney, right: original), sorted by your ratings, so you can pick the ten best Mooney images for the slides. Answers save automatically.</p>
   </header>
   <div class="bar">
     <div class="tabs" role="tablist">
@@ -108,19 +111,23 @@ h1{font:800 clamp(28px,4vw,40px)/1.05 var(--display);margin:0;text-wrap:balance;
     <div class="panel">
       <div class="progress" aria-hidden="true"><i id="blind-bar"></i></div>
       <div class="tag" id="blind-pos"></div>
-      <div class="q">Do you see a face in this image?</div>
-      <button class="btn face" id="ans-face">Yes, a face <kbd>F</kbd></button>
-      <button class="btn" id="ans-unsure">Not sure <kbd>U</kbd></button>
-      <button class="btn none" id="ans-none">No face <kbd>N</kbd></button>
+      <div class="q">How clearly do you see a face?</div>
+      <div class="scale" role="group" aria-label="Face rating from 1 to 5">
+        <button class="btn r1" id="ans-1">No face <kbd>1</kbd></button>
+        <button class="btn r2" id="ans-2">Probably not <kbd>2</kbd></button>
+        <button class="btn r3" id="ans-3">Unsure <kbd>3</kbd></button>
+        <button class="btn r4" id="ans-4">Probably a face <kbd>4</kbd></button>
+        <button class="btn r5" id="ans-5">Clearly a face <kbd>5</kbd></button>
+      </div>
       <div class="nav"><button class="btn" id="prev">← Back</button><button class="btn" id="next">Skip →</button></div>
-      <p class="hint">Look for a few seconds, then answer with your first honest impression. The order is shuffled. Please do this step before opening step 2.</p>
+      <p class="hint">Look for a few seconds, then rate your first honest impression (keys 1-5, arrows to move). The order is shuffled. Please finish this step before opening step 2.</p>
     </div>
   </section>
 
   <section id="view-pick" hidden>
     <div class="bar">
       <div class="filters" id="filters"></div>
-      <div class="hint">Left: Mooney · right: original. Click “Select” on the ten best Mooney images.</div>
+      <div class="sortbar"><span class="hint">Sort:</span><button class="chip" id="sort-rating" aria-pressed="true">your rating</button><button class="chip" id="sort-id" aria-pressed="false">image id</button></div>
     </div>
     <div class="grid" id="grid"></div>
   </section>
@@ -136,7 +143,7 @@ const ITEMS = __ITEMS__;          // [{id, light, m, o}]
 const ORDER = __ORDER__;          // shuffled ids for the blind check
 const byId = Object.fromEntries(ITEMS.map(x => [x.id, x]));
 let state = {blind: {}, top10: []};
-let pos = 0, view = "blind", filter = "all", db = null, docRef = null, saveTimer = null, writing = false, dirty = false;
+let pos = 0, view = "blind", filter = "all", sortBy = "rating", db = null, docRef = null, saveTimer = null, writing = false, dirty = false;
 const $ = s => document.getElementById(s);
 $("n-total").textContent = ITEMS.length;
 
@@ -150,7 +157,8 @@ function renderBlind() {
   const id = ORDER[pos];
   $("blind-img").src = byId[id].m;
   const a = state.blind[id];
-  $("blind-pos").textContent = `image ${pos + 1} of ${ORDER.length}` + (a ? ` · your answer: ${a}` : "");
+  $("blind-pos").textContent = `image ${pos + 1} of ${ORDER.length}` + (a ? ` · your rating: ${a}` : "");
+  for (let i = 1; i <= 5; i++) $("ans-" + i).classList.toggle("chosen", a === i);
   renderCounts();
 }
 function answer(a) {
@@ -160,7 +168,9 @@ function answer(a) {
 }
 function renderPick() {
   const g = $("grid"); g.textContent = "";
-  ITEMS.filter(x => filter === "all" || (filter === "selected" ? state.top10.includes(x.id) : x.light === filter)).forEach(x => {
+  let list = ITEMS.filter(x => filter === "all" || (filter === "selected" ? state.top10.includes(x.id) : x.light === filter));
+  if (sortBy === "rating") list = list.slice().sort((p, q) => (state.blind[q.id] || 0) - (state.blind[p.id] || 0));
+  list.forEach(x => {
     const sel = state.top10.includes(x.id);
     const c = document.createElement("div"); c.className = "card" + (sel ? " sel" : "");
     const pair = document.createElement("div"); pair.className = "pair";
@@ -172,7 +182,7 @@ function renderPick() {
     const idl = document.createElement("div"); idl.className = "id"; idl.textContent = x.id;
     const tg = document.createElement("div"); tg.className = "tag"; tg.textContent = "light " + x.light;
     const b = state.blind[x.id];
-    if (b) { const bm = document.createElement("span"); bm.className = "blindmark " + b; bm.textContent = " · blind: " + b; tg.append(bm); }
+    if (b) { const bm = document.createElement("span"); bm.className = "blindmark r" + b; bm.textContent = " · your rating " + b + "/5"; tg.append(bm); }
     left.append(idl, tg);
     const btn = document.createElement("button"); btn.id = "sel-" + x.id;
     btn.textContent = sel ? "Selected" : "Select";
@@ -221,11 +231,13 @@ async function flush() {
 document.addEventListener("keydown", e => {
   if (view !== "blind" || e.target.tagName === "TEXTAREA") return;
   const k = e.key.toLowerCase();
-  if (k === "f") answer("face"); else if (k === "u") answer("unsure"); else if (k === "n") answer("none");
+  if (["1", "2", "3", "4", "5"].includes(k)) answer(Number(k));
   else if (e.key === "ArrowRight") { pos = Math.min(ORDER.length - 1, pos + 1); renderBlind(); }
   else if (e.key === "ArrowLeft") { pos = Math.max(0, pos - 1); renderBlind(); }
 });
-$("ans-face").onclick = () => answer("face"); $("ans-unsure").onclick = () => answer("unsure"); $("ans-none").onclick = () => answer("none");
+for (let i = 1; i <= 5; i++) $("ans-" + i).onclick = () => answer(i);
+for (const [id, v] of [["sort-rating", "rating"], ["sort-id", "id"]]) $(id).onclick = () => { sortBy = v;
+  $("sort-rating").setAttribute("aria-pressed", v === "rating"); $("sort-id").setAttribute("aria-pressed", v === "id"); renderPick(); };
 $("next").onclick = () => { pos = Math.min(ORDER.length - 1, pos + 1); renderBlind(); };
 $("prev").onclick = () => { pos = Math.max(0, pos - 1); renderBlind(); };
 $("tab-blind").onclick = () => setView("blind"); $("tab-pick").onclick = () => setView("pick");

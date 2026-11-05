@@ -46,7 +46,7 @@ def main():
     mosaic = [str(data / "Mooney" / f"{k}.png") for k in sel[:9]]
 
     deck = dict(
-        title="Do Vision Models See Mooney Faces?",
+        title="Do Modern Vision Systems Perceive Faces in Mooney Images?",
         subtitle=(f"Four state-of-the-art vision systems tested on {n} photorealistic portraits under extreme "
                   "single-source lighting and on their two-tone Mooney versions"),
         date="November 2026", title_tiles=mosaic,
@@ -70,9 +70,9 @@ def main():
                 "Face DCNN: detection and ArcFace identification (Paper 1 used VGG-Face)",
                 "Inverse rendering: normals; are black regions explained as shadow or as albedo?"]),
         ],
-        approach_question=("Question: humans see a 3D face in a good Mooney image; Paper 1 explains this with inverse "
-                           "rendering (shape + extreme illumination). Do modern feed-forward vision models recover the face, "
-                           "its 3D shape and the lighting from the same two-tone image?"),
+        approach_question=("Hypotheses. H1: humans see a 3D face in a good Mooney image (Paper 1: inverse rendering of shape + "
+                           "extreme light); feed-forward vision models do not. H2 (light-from-above prior): humans find faces "
+                           "lit from below harder; do vision models show the same bias, i.e. worse results for bottom-lit Mooneys?"),
         top10=top10,
         top10_criteria=[
             dict(head="Readable, not trivial", text="A face appears for a human observer, but no single blob is a face part on its own."),

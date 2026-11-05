@@ -46,13 +46,28 @@ def main():
         rows.append(dict(m, **r, img_size=img.shape[0]))
         print(f"{m['file']:12s} {m['light']:6s} det={r.get('det_score', 0):.2f} n={r.get('n_faces')} "
               f"meas={r.get('light_dir', '-'):6s} ({r.get('light_angle', float('nan')):5.0f}) "
-              f"str={r.get('light_strength', 0):.2f} yaw={r.get('yaw') or 0:+.0f}", flush=True)
+              f"lm={r.get('light_dir_landmarks', '-'):6s} str={r.get('light_strength', 0):.2f} yaw={r.get('yaw') or 0:+.0f}",
+              flush=True)
     df = pd.DataFrame(rows)
     target = {"right": 0, "top": 90, "left": 180, "bottom": -90}
     df["angle_err"] = [abs((ang - target[l] + 180) % 360 - 180) if pd.notna(ang) else 999
                        for ang, l in zip(df.get("light_angle", np.nan), df["light"])]
+    def landmark_ok(r):
+        """Anatomical check of the designed axis: cheeks for left/right, forehead vs chin for top/bottom.
+        The chin test is skipped for beards/moustaches (dark albedo there, independent of the light)."""
+        if pd.isna(r.get("lm_lr")):
+            return False
+        if r["light"] == "left":
+            return r["lm_lr"] > 0.05
+        if r["light"] == "right":
+            return r["lm_lr"] < -0.05
+        if r["light"] == "top":
+            return r["lm_tb"] > 0.05
+        beard = any(w in str(r["extra"]) for w in ("beard", "mustache", "stubble"))
+        return beard or r["lm_tb"] < -0.05
+    df["landmarks_agree"] = df.apply(landmark_ok, axis=1)
     df["valid"] = (df.n_faces == 1) & (df.det_score >= a.min_det) & (df.angle_err <= a.max_angle_err) & \
-                  (~df.file.isin(a.exclude))
+                  df.landmarks_agree & (~df.file.isin(a.exclude))
     Path(a.report).mkdir(parents=True, exist_ok=True)
     df.drop(columns=["prompt"]).to_csv(Path(a.report) / "candidates_qc.csv", index=False)
 
@@ -76,6 +91,7 @@ def main():
         final.append(dict(id=fid, cell=r.cell, source=r.file, seed=r.seed, light=r.light, gender=r.gender,
                           age=r.age, people=r.people, pose=r.pose, hair=r.hair, extra=r.extra,
                           yaw=r.yaw, pose_label=yaw_label(r.yaw), light_angle_measured=r.light_angle,
+                          light_dir_landmarks=r.light_dir_landmarks, lm_lr=r.lm_lr, lm_tb=r.lm_tb,
                           light_strength=r.light_strength, face_contrast=r.face_contrast, det_score=r.det_score,
                           bbox=json.dumps([round(v, 1) for v in r.bbox]), img_size=int(r.img_size), prompt=r.prompt))
     pd.DataFrame(final).to_csv(out / "metadata.csv", index=False)

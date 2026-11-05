@@ -39,6 +39,38 @@ def light_from_shading(gray, mask):
     return angle, strength, contrast
 
 
+def disk(shape, c, r):
+    h, w = shape[:2]
+    yy, xx = np.mgrid[0:h, 0:w]
+    return (xx - c[0]) ** 2 + (yy - c[1]) ** 2 <= r * r
+
+
+def light_from_landmarks(gray, kps):
+    """Second, anatomical light-direction estimate from 5 key points (eyes, nose, mouth corners).
+
+    Mean luminance of cheek / forehead / chin disks -> left-right and top-bottom contrasts.
+    Returns (direction, lr, tb) with lr > 0 = image-left side brighter, tb > 0 = forehead brighter.
+    """
+    k = np.asarray(kps, float)
+    eyes = k[np.argsort(k[:2, 0])]                        # image-left eye first
+    mouth = k[3:5][np.argsort(k[3:5, 0])]
+    d = np.linalg.norm(eyes[1] - eyes[0]) + 1e-6           # inter-ocular distance (px)
+    centre = eyes.mean(0)
+    up = centre - (mouth.mean(0) - centre) / (np.linalg.norm(mouth.mean(0) - centre) + 1e-6) * d * 0.6
+    chin = mouth.mean(0) + (mouth.mean(0) - centre) / (np.linalg.norm(mouth.mean(0) - centre) + 1e-6) * d * 0.45
+    cheek_l = (eyes[0] + mouth[0]) / 2 + (eyes[0] - eyes[1]) / d * d * 0.15
+    cheek_r = (eyes[1] + mouth[1]) / 2 + (eyes[1] - eyes[0]) / d * d * 0.15
+    m = lambda c, r: float(gray[disk(gray.shape, c, r)].mean())
+    Ll, Lr, Lt, Lb = m(cheek_l, 0.22 * d), m(cheek_r, 0.22 * d), m(up, 0.28 * d), m(chin, 0.22 * d)
+    lr = (Ll - Lr) / (Ll + Lr + 1e-6)
+    tb = (Lt - Lb) / (Lt + Lb + 1e-6)
+    if abs(lr) >= abs(tb):
+        direction = "left" if lr > 0 else "right"
+    else:
+        direction = "top" if tb > 0 else "bottom"
+    return direction, lr, tb
+
+
 def nearest_direction(angle):
     diffs = {k: abs((angle - v + 180) % 360 - 180) for k, v in DIRS.items()}
     k = min(diffs, key=diffs.get)
@@ -66,7 +98,9 @@ def analyse(app, img_bgr):
     angle, strength, contrast = light_from_shading(gray, mask)
     d, err = nearest_direction(angle)
     pitch, yaw, roll = (f.pose.tolist() if f.get("pose") is not None else (None, None, None))
+    lm_dir, lr, tb = light_from_landmarks(gray, f.kps)
     out.update(bbox=[float(v) for v in f.bbox], face_frac=float(mask.mean()), light_angle=angle, light_strength=strength,
-               light_dir=d, light_dir_err=err, face_contrast=contrast, yaw=yaw, pitch=pitch, roll=roll,
+               light_dir=d, light_dir_err=err, light_dir_landmarks=lm_dir, lm_lr=lr, lm_tb=tb,
+               face_contrast=contrast, yaw=yaw, pitch=pitch, roll=roll,
                sex=f.get("sex"), age=int(f.age) if f.get("age") is not None else None)
     return out

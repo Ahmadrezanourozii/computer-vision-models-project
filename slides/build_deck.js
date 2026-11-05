@@ -105,9 +105,9 @@ function colorize(spec) { if (spec && spec.series) spec.series.forEach(x => { x.
     rounding: false }));
   s.addText("COMPUTATIONAL VISUAL PERCEPTION  ·  PROJECT PART 1", { x: MX, y: 1.0, w: 6.9, h: 0.3, fontSize: 12, bold: true,
     charSpacing: 3, color: HEX.accent1, margin: 0, isTextBox: true });
-  s.addText(IN.title || "Do Vision Models See Mooney Faces?", { x: MX, y: 1.45, w: 6.9, h: 1.7, fontSize: 40, bold: true,
+  s.addText(IN.title || "Do Modern Vision Systems Perceive Faces in Mooney Images?", { x: MX, y: 1.45, w: 6.9, h: 1.95, fontSize: 36, bold: true,
     fontFace: THEME.headFontFace, color: HEX.lt1, margin: 0, valign: "top", isTextBox: true });
-  s.addText(IN.subtitle || "", { x: MX, y: 3.2, w: 6.6, h: 0.9, fontSize: 18, color: "C9CED3", margin: 0, valign: "top",
+  s.addText(IN.subtitle || "", { x: MX, y: 3.5, w: 6.6, h: 0.9, fontSize: 16, color: "C9CED3", margin: 0, valign: "top",
     isTextBox: true });
   s.addText([
     { text: "Ahmadreza Nourozi", options: { fontSize: 22, bold: true, color: HEX.lt1, breakLine: true } },
@@ -124,7 +124,7 @@ function colorize(spec) { if (spec && spec.series) spec.series.forEach(x => { x.
   tag(s, "Approach and ideas");
   s.addText(IN.approach_title, { placeholder: "title" });
   const cols = IN.approach_cols;               // [{head, lines:[...]}, x3]
-  const cw = (W - 2 * MX - 2 * 0.3) / 3, cy = 1.5, ch = 4.55;
+  const cw = (W - 2 * MX - 2 * 0.3) / 3, cy = 1.45, ch = 4.5;
   cols.forEach((c, i) => {
     const x = MX + i * (cw + 0.3);
     card(s, x, cy, cw, ch);
@@ -138,7 +138,8 @@ function colorize(spec) { if (spec && spec.series) spec.series.forEach(x => { x.
       { x: x + 0.25, y: cy + 0.95, w: cw - 0.45, h: ch - 1.15, fontSize: 13, color: HEX.dk2, valign: "top",
         paraSpaceAfter: 6, margin: 0, isTextBox: true });
   });
-  s.addText(IN.approach_question, { x: MX, y: 6.25, w: W - 2 * MX, h: 0.55, fontSize: 14, italic: true, color: HEX.dk1,
+  card(s, MX, 6.15, W - 2 * MX, 0.78, "FFF4E2");
+  s.addText(IN.approach_question, { x: MX + 0.25, y: 6.15, w: W - 2 * MX - 0.5, h: 0.78, fontSize: 13, color: HEX.dk1,
     margin: 0, valign: "middle", isTextBox: true });
 }
 

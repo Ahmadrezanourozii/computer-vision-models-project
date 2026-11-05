@@ -2,11 +2,12 @@
 
     python data_generation/make_gen_kernel.py --account ah22reza --shard 0 --nshards 2 -o kaggle/gen0
 
-Generator: Z-Image-Turbo (Tongyi-MAI, Apache-2.0, 6B single-stream DiT, 8 steps).  It follows
-long, explicit lighting descriptions far better than SDXL (pilot: SDXL ignored left/right/top/bottom).
-The T4 has no native bf16 and the model overflows in fp16, so it runs in (emulated) bf16:
-  phase 1 - all prompts are encoded once with the Qwen3 text encoder on GPU 0,
-  phase 2 - the text encoder is dropped and one transformer copy per T4 renders images in parallel.
+Generator: Z-Image-Turbo (Tongyi-MAI, Apache-2.0, 6B single-stream DiT, 8 steps).  It follows long,
+explicit lighting descriptions far better than SDXL (pilot: SDXL ignored left/right/top/bottom).
+A T4 has no native bf16 and the model overflows in fp16, so it runs in (emulated) bf16:
+  1. one process encodes all prompts with the Qwen3 text encoder and saves the embeddings,
+  2. one worker process per GPU (own CUDA context) loads transformer + VAE and renders its share;
+     VAE decoding is tiled on the GPU with a float32 CPU fallback (the 12 GB transformer leaves ~2 GB).
 The design table (data_generation/design.py) is embedded, so the kernel needs no input dataset.
 """
 import argparse
@@ -18,127 +19,131 @@ sys.path.insert(0, str(Path(__file__).parent))
 from design import build  # noqa: E402
 
 LIGHT = {
-    "left": "a single hard light from the left side of the frame (camera left, split lighting): the left half of the face "
-            "is brightly lit and the right half falls into deep black shadow",
-    "right": "a single hard light from the right side of the frame (camera right, split lighting): the right half of the "
-             "face is brightly lit and the left half falls into deep black shadow",
-    "top": "a single hard spotlight directly above the head (overhead top lighting): the top of the head, the forehead, the "
-           "nose bridge and the cheekbones are bright, while the eye sockets, the area under the nose, under the lips and "
-           "under the chin are in deep black shadow",
-    "bottom": "a single hard light directly below the face pointing upwards (under-lighting, like a flashlight held under "
-              "the chin): the underside of the chin, the jaw, the nostrils and the lower cheeks are brightly lit, while the "
-              "forehead, the eye sockets and the top of the head are in deep shadow",
+    "left": ("from the far left side of the frame (90 degrees to the camera, split lighting)",
+             "Only the left half of the face is lit; the right half of the face is completely black"),
+    "right": ("from the far right side of the frame (90 degrees to the camera, split lighting)",
+              "Only the right half of the face is lit; the left half of the face is completely black"),
+    "top": ("from directly above the head (overhead top lighting)",
+            "The top of the head, the forehead, the nose bridge and the cheekbones are lit; the eye sockets, the areas "
+            "under the nose and under the lips, the chin and the neck are in deep black shadow"),
+    "bottom": ("from directly below the chin, pointing upwards (under-lighting, like a flashlight held under the chin)",
+               "The chin, the jaw, the underside of the nose and the lower cheeks are lit from below; the forehead, the "
+               "eye sockets and the top of the head are in deep black shadow"),
 }
 POSE = {"frontal": "facing the camera directly", "three-quarter": "head turned in a three-quarter view"}
 
-TEMPLATE = ("Close-up low-key studio portrait photograph of a {age} {people} {noun} with {hair}{extra}, {pose}, neutral "
-            "expression, wearing a plain black shirt; the head fills most of the frame. Lighting: {light}. The light source "
-            "itself is outside the frame. No other light, no fill light, no rim light. Pure black background, "
-            "high-contrast chiaroscuro, sharp focus, photorealistic, 85mm lens.")
+TEMPLATE = ("Dramatic chiaroscuro portrait lit by a single hard light {light}. {effect}. Close-up studio photograph of a "
+            "{age} {people} {noun} with {hair}{extra}, {pose}, neutral expression, wearing a plain black shirt, the head "
+            "filling most of the frame. Pure black background, no fill light, no rim light, the light source itself is "
+            "outside the frame, extreme contrast, photorealistic, sharp focus, 85mm lens.")
 
 
 def prompt(r):
     extra = f", {r['extra']}" if r["extra"] else ""
-    return TEMPLATE.format(age=r["age"], people=r["people"], noun="woman" if r["gender"] == "female" else "man",
-                           hair=r["hair"], extra=extra, pose=POSE[r["pose"]], light=LIGHT[r["light"]])
+    light, effect = LIGHT[r["light"]]
+    return TEMPLATE.format(light=light, effect=effect, age=r["age"], people=r["people"],
+                           noun="woman" if r["gender"] == "female" else "man", hair=r["hair"], extra=extra,
+                           pose=POSE[r["pose"]])
 
 
-KERNEL = r'''
-import gc, json, os, subprocess, sys, threading, time
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
-subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-U", "diffusers>=0.42", "transformers", "accelerate"], check=False)
+WORKER = r'''
+import json, os, sys, time
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 import torch
-from diffusers import AutoencoderKL, ZImagePipeline, ZImageTransformer2DModel
-import diffusers.models.transformers.transformer_z_image as tz
+from diffusers import AutoencoderKL, ZImagePipeline
 MODEL = "Tongyi-MAI/Z-Image-Turbo"
+TMP, OUT = "/tmp/zimg", "/kaggle/working/candidates"
+ROWS = json.load(open(os.path.join(TMP, "rows.json")))
+SIZE = int(os.environ["GEN_SIZE"])
+mode = sys.argv[1]
 
-# Memory-saving attention: the 12 GB transformer leaves ~2 GB on a T4, too little for the full
-# (heads x seq x seq) attention matrix at 768 px.  Queries are processed in chunks (exact result).
-_attn = tz.dispatch_attention_fn
-def chunked_attention(query, key, value, attn_mask=None, **kw):
-    n, step = query.shape[1], 640                          # layout [batch, seq, heads, dim]
-    if n <= step:
-        return _attn(query, key, value, attn_mask=attn_mask, **kw)
-    return torch.cat([_attn(query[:, i:i + step], key, value, attn_mask=attn_mask, **kw) for i in range(0, n, step)], dim=1)
-tz.dispatch_attention_fn = chunked_attention
-ROWS = json.loads(__ROWS__)
-SIZE = __SIZE__
-OUT = "/kaggle/working/candidates"; os.makedirs(OUT, exist_ok=True)
-ngpu = torch.cuda.device_count()
-print(ngpu, torch.cuda.get_device_name(0), len(ROWS), "images", flush=True)
-t0 = time.time()
+if mode == "encode":
+    pipe = ZImagePipeline.from_pretrained(MODEL, torch_dtype=torch.bfloat16, transformer=None, vae=None)
+    pipe.text_encoder.to("cuda")
+    emb = {}
+    with torch.no_grad():
+        for r in ROWS:
+            pe, _ = pipe.encode_prompt(prompt=r["prompt"], device="cuda", do_classifier_free_guidance=False)
+            emb[r["file"]] = [e.to("cpu") for e in pe]
+    torch.save(emb, os.path.join(TMP, "emb.pt"))
+    print("encoded", len(emb), flush=True)
+    sys.exit(0)
 
-# ---- phase 1: encode all prompts once
-pipe = ZImagePipeline.from_pretrained(MODEL, torch_dtype=torch.bfloat16)
-pipe.text_encoder.to("cuda:0")
-emb = {}
-with torch.no_grad():
-    for r in ROWS:
-        pe, _ = pipe.encode_prompt(prompt=r["prompt"], device="cuda:0", do_classifier_free_guidance=False)
-        emb[r["file"]] = [e.to("cpu") for e in pe]
-pipe.text_encoder = None
-gc.collect(); torch.cuda.empty_cache()
-print(f"phase 1 done {time.time()-t0:.0f}s", flush=True)
-
-# ---- phase 2: one transformer per GPU
-pipes = []
-for g in range(ngpu):
-    dev = f"cuda:{g}"
-    if g == 0:
-        pipe.transformer.to(dev); pipe.vae.to(dev); p = pipe
-    else:
-        tr = ZImageTransformer2DModel.from_pretrained(MODEL, subfolder="transformer", torch_dtype=torch.bfloat16).to(dev)
-        vae = AutoencoderKL.from_pretrained(MODEL, subfolder="vae", torch_dtype=torch.bfloat16).to(dev)
-        p = ZImagePipeline(scheduler=pipe.scheduler.__class__.from_config(pipe.scheduler.config), vae=vae,
-                           text_encoder=None, tokenizer=None, transformer=tr)
-    pipes.append((p, dev))
-print(f"phase 2 ready {time.time()-t0:.0f}s", flush=True)
-meta, lock = [], threading.Lock()
-# VAE decoding: tiled on the GPU (the 12 GB transformer leaves ~2 GB); float32 CPU copy as fallback
-for p, _ in pipes:
-    p.vae.enable_tiling()
+g, n = int(sys.argv[2]), int(sys.argv[3])
+emb = torch.load(os.path.join(TMP, "emb.pt"))
+pipe = ZImagePipeline.from_pretrained(MODEL, torch_dtype=torch.bfloat16, text_encoder=None, tokenizer=None)
+pipe.to("cuda")
+pipe.vae.enable_tiling()
 cpu_vae = AutoencoderKL.from_pretrained(MODEL, subfolder="vae", torch_dtype=torch.float32)
+open(os.path.join(TMP, f"ready{g}"), "w").write("1")
+print(f"worker {g} ready", flush=True)
 
-def decode(p, lat):
-    z = lat.to(p.vae.dtype) / p.vae.config.scaling_factor + p.vae.config.shift_factor
+def decode(lat):
+    z = lat.to(pipe.vae.dtype) / pipe.vae.config.scaling_factor + pipe.vae.config.shift_factor
     try:
         with torch.no_grad():
-            x = p.vae.decode(z, return_dict=False)[0]
+            x = pipe.vae.decode(z, return_dict=False)[0]
     except torch.OutOfMemoryError:
         torch.cuda.empty_cache()
         z = lat.float().cpu() / cpu_vae.config.scaling_factor + cpu_vae.config.shift_factor
         with torch.no_grad():
             x = cpu_vae.decode(z, return_dict=False)[0]
-    return p.image_processor.postprocess(x.float().cpu(), output_type="pil")[0]
+    return pipe.image_processor.postprocess(x.float().cpu(), output_type="pil")[0]
 
-def worker(g):
-    p, dev = pipes[g]
-    for r in ROWS[g::ngpu]:
-        path = os.path.join(OUT, r["file"])
-        if os.path.exists(path):
-            continue
-        t = time.time()
-        try:
-            with torch.no_grad():
-                lat = p(prompt_embeds=[e.to(dev) for e in emb[r["file"]]], height=SIZE, width=SIZE, num_inference_steps=9,
-                        guidance_scale=0.0, output_type="latent",
-                        generator=torch.Generator("cpu").manual_seed(int(r["seed"]))).images
-            img = decode(p, lat)
-        except Exception as e:
-            print("FAILED", r["file"], repr(e)[:300], flush=True)
-            torch.cuda.empty_cache()
-            continue
-        img.save(path)
-        with lock:
-            meta.append(dict(r, sec=round(time.time() - t, 1)))
-            json.dump(meta, open(os.path.join(OUT, "meta.json"), "w"), indent=1)
-            print(r["file"], f"{time.time() - t:.0f}s", len(meta), flush=True)
+meta, fails = [], 0
+for r in ROWS[g::n]:
+    path = os.path.join(OUT, r["file"])
+    if os.path.exists(path):
+        continue
+    t = time.time()
+    try:
+        with torch.no_grad():
+            lat = pipe(prompt_embeds=[e.to("cuda") for e in emb[r["file"]]], height=SIZE, width=SIZE, num_inference_steps=9,
+                       guidance_scale=0.0, output_type="latent",
+                       generator=torch.Generator("cpu").manual_seed(int(r["seed"]))).images
+        img = decode(lat)
+    except Exception as e:
+        fails += 1
+        print(f"worker {g} FAILED {r['file']}: {repr(e)[:200]}", flush=True)
+        if fails >= 3 and not meta:
+            sys.exit(f"worker {g}: first images failed")
+        continue
+    img.save(path)
+    meta.append(dict(r, sec=round(time.time() - t, 1)))
+    json.dump(meta, open(os.path.join(TMP, f"meta{g}.json"), "w"), indent=1)
+    print(f"worker {g}: {r['file']} {time.time() - t:.0f}s ({len(meta)})", flush=True)
+'''
 
-th = [threading.Thread(target=worker, args=(g,)) for g in range(ngpu)]
-[t.start() for t in th]; [t.join() for t in th]
-print("done", len(meta), f"{time.time()-t0:.0f}s")
+KERNEL = r'''
+import json, os, subprocess, sys, time, glob
+subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-U", "diffusers>=0.42", "transformers", "accelerate"], check=False)
+TMP, OUT = "/tmp/zimg", "/kaggle/working/candidates"
+os.makedirs(TMP, exist_ok=True); os.makedirs(OUT, exist_ok=True)
+json.dump(json.loads(__ROWS__), open(os.path.join(TMP, "rows.json"), "w"))
+open(os.path.join(TMP, "worker.py"), "w").write(__WORKER__)
+env = dict(os.environ, GEN_SIZE="__SIZE__")
+t0 = time.time()
+import torch
+ngpu = torch.cuda.device_count()
+print("GPUs:", ngpu, flush=True)
+r = subprocess.run([sys.executable, os.path.join(TMP, "worker.py"), "encode"], env=dict(env, CUDA_VISIBLE_DEVICES="0"))
+if r.returncode:
+    sys.exit("prompt encoding failed")
+print(f"encoding done {time.time() - t0:.0f}s", flush=True)
+procs = []
+for g in range(ngpu):
+    procs.append(subprocess.Popen([sys.executable, os.path.join(TMP, "worker.py"), "work", str(g), str(ngpu)],
+                                  env=dict(env, CUDA_VISIBLE_DEVICES=str(g))))
+    while not os.path.exists(os.path.join(TMP, f"ready{g}")) and procs[-1].poll() is None:
+        time.sleep(5)                       # stagger the loads: one 12 GB model in RAM at a time
+codes = [p.wait() for p in procs]
+meta = []
+for f in sorted(glob.glob(os.path.join(TMP, "meta*.json"))):
+    meta += json.load(open(f))
+json.dump(meta, open(os.path.join(OUT, "meta.json"), "w"), indent=1)
+print("worker exit codes", codes, "| images:", len(meta), f"| {time.time() - t0:.0f}s")
 if not meta:
-    raise SystemExit("no image was generated")
+    sys.exit("no image was generated")
 '''
 
 
@@ -161,7 +166,8 @@ def main():
             for r in rows if r["cell"] in mine]
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
-    code = KERNEL.replace("__ROWS__", repr(json.dumps(rows))).replace("__SIZE__", str(a.size))
+    code = (KERNEL.replace("__ROWS__", repr(json.dumps(rows))).replace("__WORKER__", repr(WORKER))
+            .replace("__SIZE__", str(a.size)))
     (out / "gen.py").write_text(code)
     slug = a.slug or f"mooney-gen-shard{a.shard}"
     json.dump({"id": f"{a.account}/{slug}", "title": slug, "code_file": "gen.py", "language": "python",
