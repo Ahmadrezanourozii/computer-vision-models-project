@@ -161,7 +161,7 @@ def export_subset(selected, orig_dir, mooney_dir, subset_dir):
 
 
 # ----------------------------------------------------------------------------- layout
-def build_app():
+def build_app(blur_default=1.5, white_default=40.0):
     with gr.Blocks(title="Mooney Image Generator") as app:
         gr.Markdown("## Mooney Image Generator\nGrayscale → Gaussian blur → threshold at a fixed percentage "
                     "of white pixels.  *CompVP project, Part 1*")
@@ -169,8 +169,8 @@ def build_app():
             with gr.Row():
                 with gr.Column(scale=1):
                     inp = gr.Image(label="Input image", type="numpy", height=320)
-                    blur = gr.Slider(0, 6, value=1.5, step=0.1, label="Blur strength σ (%)", info=BLUR_HELP)
-                    white = gr.Slider(1, 99, value=40, step=1, label="White pixels (%)", info=WHITE_HELP)
+                    blur = gr.Slider(0, 6, value=blur_default, step=0.1, label="Blur strength σ (%)", info=BLUR_HELP)
+                    white = gr.Slider(1, 99, value=white_default, step=1, label="White pixels (%)", info=WHITE_HELP)
                     min_blob = gr.Slider(0, 1, value=0, step=0.02, label="Despeckle (%)",
                                          info="remove black/white islands smaller than this % of the image")
                     invert = gr.Checkbox(label="Invert contrast polarity", value=False)
@@ -198,8 +198,8 @@ def build_app():
                     el = gr.Slider(-90, 90, value=25, step=1, label="Light elevation (°)", info="+ = from above")
                     yaw = gr.Slider(-90, 90, value=0, step=1, label="Object yaw (°)")
                     pitch = gr.Slider(-45, 45, value=0, step=1, label="Object pitch (°)")
-                    zoom = gr.Slider(0.5, 3, value=1.0, step=0.05, label="Zoom")
-                    cy = gr.Slider(-0.5, 0.5, value=0.0, step=0.01, label="View centre (vertical)")
+                    zoom = gr.Slider(0.5, 3, value=1.8, step=0.05, label="Zoom")
+                    cy = gr.Slider(-0.5, 0.5, value=0.18, step=0.01, label="View centre (vertical)")
                     amb = gr.Slider(0, 0.3, value=0.0, step=0.01, label="Ambient light")
                     mblur = gr.Slider(0, 6, value=1.2, step=0.1, label="Blur strength σ (%)", info=BLUR_HELP)
                     mwhite = gr.Slider(1, 99, value=40, step=1, label="White pixels (%)", info=WHITE_HELP)
@@ -226,8 +226,8 @@ def build_app():
                     in_dir = gr.Textbox(label="Input folder", placeholder="e.g. data/Original")
                     files = gr.File(label="... or upload images", file_count="multiple", height=120)
                     out_dir = gr.Textbox(label="Output folder", placeholder="e.g. data/Mooney")
-                    bblur = gr.Slider(0, 6, value=1.5, step=0.1, label="Blur strength σ (%)", info=BLUR_HELP)
-                    bwhite = gr.Slider(1, 99, value=40, step=1, label="White pixels (%)", info=WHITE_HELP)
+                    bblur = gr.Slider(0, 6, value=blur_default, step=0.1, label="Blur strength σ (%)", info=BLUR_HELP)
+                    bwhite = gr.Slider(1, 99, value=white_default, step=1, label="White pixels (%)", info=WHITE_HELP)
                     bblob = gr.Slider(0, 1, value=0, step=0.02, label="Despeckle (%)")
                     binv = gr.Checkbox(label="Invert contrast polarity", value=False)
                     run = gr.Button("Run batch", variant="primary")
@@ -261,8 +261,10 @@ def main():
     ap = argparse.ArgumentParser(description="Mooney tool GUI")
     ap.add_argument("--port", type=int, default=7860)
     ap.add_argument("--share", action="store_true")
+    ap.add_argument("--blur", type=float, default=1.5, help="default blur strength (sigma in %% of the image side)")
+    ap.add_argument("--white", type=float, default=40.0, help="default percentage of white pixels")
     a = ap.parse_args()
-    build_app().launch(server_port=a.port, share=a.share, theme=gr.themes.Soft())
+    build_app(a.blur, a.white).launch(server_port=a.port, share=a.share, theme=gr.themes.Soft())
 
 
 if __name__ == "__main__":
