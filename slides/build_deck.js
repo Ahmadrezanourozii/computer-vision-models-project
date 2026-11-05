@@ -212,6 +212,22 @@ function resultSlide(r, idx) {
 }
 (IN.results || []).forEach((r, i) => resultSlide(r, i + 1));
 
+// ---------------------------------------------------------------- light-from-above slide (hypothesis H2)
+if (IN.light_slide) {
+  const L = IN.light_slide;
+  const s = pres.addSlide({ masterName: "CONTENT" });
+  tag(s, "Results · light from above vs. below (H2)");
+  s.addText(L.title, { placeholder: "title" });
+  barChart(s, colorize(L.chart), { x: MX - 0.1, y: 1.4, w: 8.3, h: 4.45, showValue: false });
+  card(s, MX + 8.45, 1.45, W - 2 * MX - 8.45, 4.4);
+  s.addText(L.points.map((t, k) => ({ text: t, options: { bullet: true, breakLine: k < L.points.length - 1 } })),
+    { x: MX + 8.65, y: 1.6, w: W - 2 * MX - 8.85, h: 4.1, fontSize: 12.5, color: HEX.dk2, valign: "top", paraSpaceAfter: 6,
+      margin: 0, isTextBox: true });
+  card(s, MX, 6.0, W - 2 * MX, 0.82, "FFF4E2");
+  s.addText(L.takeaway, { x: MX + 0.25, y: 6.0, w: W - 2 * MX - 0.5, h: 0.82, fontSize: 13.5, color: HEX.dk1, margin: 0,
+    valign: "middle", isTextBox: true });
+}
+
 // ---------------------------------------------------------------- 9 summary across systems
 if (IN.summary) {
   const s = pres.addSlide({ masterName: "CONTENT" });
