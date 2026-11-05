@@ -53,3 +53,28 @@ resolution), `--params-csv` (per-image overrides), `--workers` (parallel process
 | `analysis/` | metrics and figures comparing original vs. Mooney results |
 | `slides/` | builds the presentation |
 | `kaggle/` | GPU jobs (Kaggle kernels) |
+
+## Part 1 pipeline (as submitted)
+
+1. `data_generation/design.py` – balanced design: 4 light directions × 25, gender, age, 6 backgrounds, pose.
+2. `data_generation/make_gen_kernel.py` – Z-Image-Turbo portraits on Kaggle (2 candidates per cell, 204 in total).
+3. `data_generation/qc_select.py` – QC: one face (SCRFD), light direction verified by shading gradient **and**
+   facial key-point regions, border artefacts; best candidate per cell -> 100 originals + `data/metadata.csv`.
+4. `data_generation/crop_faces.py` – face-centred square crops (1.7× face box, 512 px), as head size was normalised in Paper 1.
+5. `analysis/mooney_sweep.py` – global choice of the two controls -> **blur σ = 1.5 % of the image side, 15 % white**.
+6. `python -m mooney convert data/Original -o data/Mooney --blur 1.5 --white 15` – the 100 Mooney images.
+7. `tools/make_review_page.py` – blind 1–5 face rating + manual top-10 pick (done by the author).
+8. `vision/run_*.py` via `kaggle/make_vision_kernel.py` – the four vision systems (Result1–Result4).
+9. `analysis/run_analysis.py` – metrics, example panels, human-vs-machine correlations.
+10. `slides/prepare_deck.py` + `slides/build_deck.js` – the presentation; `tools/make_submission.py` – the zip.
+
+## Main results (100 originals vs. 100 Mooneys)
+
+| system | original | Mooney |
+|---|---|---|
+| SCRFD face detection | 100 % | 0 % |
+| Qwen3-VL "contains a face" | 100 % | 38 % (top-lit 88 %, bottom-lit 8 %) |
+| Depth Anything V2: depth agreement with the original (r) | – | 0.09 (follows the white pattern, partial r 0.70) |
+| ArcFace identification among 100 (aligned with the original's key points) | – | rank-1 2 % (chance 1 %) |
+| Marigold: share of contrast explained as shading | 0.86 | 0.36 |
+| Human observer (blind, n = 1): rating ≥ 4 | – | 18 % (top-lit 52 %, bottom-lit 0 %) |

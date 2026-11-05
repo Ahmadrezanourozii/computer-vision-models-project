@@ -26,7 +26,7 @@ from mooney.core import MooneyParams, make_mooney, load_image  # noqa: E402
 from metrics import ellipse_mask  # noqa: E402
 
 BLURS = [0.75, 1.0, 1.5, 2.0, 2.5, 3.0]
-WHITES = [10, 14, 18, 22, 26, 30]
+WHITES = [12, 15, 18, 21, 24, 28]
 
 
 def main():

@@ -76,8 +76,10 @@ def depth_metrics(res_dir, meta, mooney_dir):
 
 
 # ----------------------------------------------------------------------------- system 2: VLM
-FACE_WORDS = re.compile(r"\b(face|faces|person|people|man|woman|men|women|boy|girl|portrait|head|human|guy|lady|"
-                        r"profile|someone|individual|self-portrait|selfie)\b", re.I)
+# what counts as "the VLM perceived a face": face/head/person words; NOT "human" (hand, foot, ...), "figure",
+# "profile" or "silhouette", which the model uses for non-face shapes as well
+FACE_WORDS = re.compile(r"\b(face|faces|facial|portrait|head|heads|skull|person|people|man|woman|men|women|boy|girl|"
+                        r"someone|individual|self-portrait|selfie)\b", re.I)
 
 
 def norm_ans(x):
