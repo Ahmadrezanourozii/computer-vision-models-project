@@ -94,6 +94,22 @@ for g in range(ngpu):
     pipes.append((p, dev))
 print(f"phase 2 ready {time.time()-t0:.0f}s", flush=True)
 meta, lock = [], threading.Lock()
+# VAE decoding: tiled on the GPU (the 12 GB transformer leaves ~2 GB); float32 CPU copy as fallback
+for p, _ in pipes:
+    p.vae.enable_tiling()
+cpu_vae = AutoencoderKL.from_pretrained(MODEL, subfolder="vae", torch_dtype=torch.float32)
+
+def decode(p, lat):
+    z = lat.to(p.vae.dtype) / p.vae.config.scaling_factor + p.vae.config.shift_factor
+    try:
+        with torch.no_grad():
+            x = p.vae.decode(z, return_dict=False)[0]
+    except torch.OutOfMemoryError:
+        torch.cuda.empty_cache()
+        z = lat.float().cpu() / cpu_vae.config.scaling_factor + cpu_vae.config.shift_factor
+        with torch.no_grad():
+            x = cpu_vae.decode(z, return_dict=False)[0]
+    return p.image_processor.postprocess(x.float().cpu(), output_type="pil")[0]
 
 def worker(g):
     p, dev = pipes[g]
@@ -102,9 +118,16 @@ def worker(g):
         if os.path.exists(path):
             continue
         t = time.time()
-        with torch.no_grad():
-            img = p(prompt_embeds=[e.to(dev) for e in emb[r["file"]]], height=SIZE, width=SIZE, num_inference_steps=9,
-                    guidance_scale=0.0, generator=torch.Generator("cpu").manual_seed(int(r["seed"]))).images[0]
+        try:
+            with torch.no_grad():
+                lat = p(prompt_embeds=[e.to(dev) for e in emb[r["file"]]], height=SIZE, width=SIZE, num_inference_steps=9,
+                        guidance_scale=0.0, output_type="latent",
+                        generator=torch.Generator("cpu").manual_seed(int(r["seed"]))).images
+            img = decode(p, lat)
+        except Exception as e:
+            print("FAILED", r["file"], repr(e)[:300], flush=True)
+            torch.cuda.empty_cache()
+            continue
         img.save(path)
         with lock:
             meta.append(dict(r, sec=round(time.time() - t, 1)))
@@ -114,6 +137,8 @@ def worker(g):
 th = [threading.Thread(target=worker, args=(g,)) for g in range(ngpu)]
 [t.start() for t in th]; [t.join() for t in th]
 print("done", len(meta), f"{time.time()-t0:.0f}s")
+if not meta:
+    raise SystemExit("no image was generated")
 '''
 
 
