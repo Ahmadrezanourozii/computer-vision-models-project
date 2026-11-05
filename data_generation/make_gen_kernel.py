@@ -2,8 +2,12 @@
 
     python data_generation/make_gen_kernel.py --account ah22reza --shard 0 --nshards 2 -o kaggle/gen0
 
-The design table (data_generation/design.py) is embedded into the kernel script, so the kernel
-needs no input dataset.  Generator: RealVisXL V5.0 (SDXL fine-tune, openrail++), fp16 on a T4.
+Generator: Z-Image-Turbo (Tongyi-MAI, Apache-2.0, 6B single-stream DiT, 8 steps).  It follows
+long, explicit lighting descriptions far better than SDXL (pilot: SDXL ignored left/right/top/bottom).
+The T4 has no native bf16 and the model overflows in fp16, so it runs in (emulated) bf16:
+  phase 1 - all prompts are encoded once with the Qwen3 text encoder on GPU 0,
+  phase 2 - the text encoder is dropped and one transformer copy per T4 renders images in parallel.
+The design table (data_generation/design.py) is embedded, so the kernel needs no input dataset.
 """
 import argparse
 import json
@@ -14,65 +18,91 @@ sys.path.insert(0, str(Path(__file__).parent))
 from design import build  # noqa: E402
 
 LIGHT = {
-    "left": "split lighting from the left, right half of the face in deep shadow",
-    "right": "split lighting from the right, left half of the face in deep shadow",
-    "top": "hard overhead top light, dark eye sockets, shadows under nose and chin",
-    "bottom": "lit from below, flashlight under the chin, horror lighting, upper face in shadow",
+    "left": "a single hard light from the left side of the frame (camera left, split lighting): the left half of the face "
+            "is brightly lit and the right half falls into deep black shadow",
+    "right": "a single hard light from the right side of the frame (camera right, split lighting): the right half of the "
+             "face is brightly lit and the left half falls into deep black shadow",
+    "top": "a single hard spotlight directly above the head (overhead top lighting): the top of the head, the forehead, the "
+           "nose bridge and the cheekbones are bright, while the eye sockets, the area under the nose, under the lips and "
+           "under the chin are in deep black shadow",
+    "bottom": "a single hard light directly below the face pointing upwards (under-lighting, like a flashlight held under "
+              "the chin): the underside of the chin, the jaw, the nostrils and the lower cheeks are brightly lit, while the "
+              "forehead, the eye sockets and the top of the head are in deep shadow",
 }
-AGE = {"young adult": "young", "middle-aged": "middle-aged", "elderly": "elderly"}
-POSE = {"frontal": "looking straight at the camera", "three-quarter": "three-quarter view"}
-NEG = ("soft light, fill light, flat lighting, even lighting, bright background, colorful background, white background, "
-       "bad anatomy, deformed, face asymmetry, eyes asymmetry, deformed eyes, deformed mouth, open mouth, text, "
-       "watermark, painting, drawing, cartoon, 3d render, hands")
+POSE = {"frontal": "facing the camera directly", "three-quarter": "head turned in a three-quarter view"}
+
+TEMPLATE = ("Close-up low-key studio portrait photograph of a {age} {people} {noun} with {hair}{extra}, {pose}, neutral "
+            "expression, wearing a plain black shirt; the head fills most of the frame. Lighting: {light}. The light source "
+            "itself is outside the frame. No other light, no fill light, no rim light. Pure black background, "
+            "high-contrast chiaroscuro, sharp focus, photorealistic, 85mm lens.")
 
 
 def prompt(r):
-    who = f"{AGE[r['age']]} {r['people']} {'woman' if r['gender'] == 'female' else 'man'}"
     extra = f", {r['extra']}" if r["extra"] else ""
-    return (f"low key studio portrait photo of a {who} with {r['hair']}{extra}, {POSE[r['pose']]}, {LIGHT[r['light']]}, "
-            f"single hard light, pure black background, chiaroscuro, dark clothes, photorealistic")
+    return TEMPLATE.format(age=r["age"], people=r["people"], noun="woman" if r["gender"] == "female" else "man",
+                           hair=r["hair"], extra=extra, pose=POSE[r["pose"]], light=LIGHT[r["light"]])
 
 
 KERNEL = r'''
-import json, os, subprocess, sys, time
-subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-U", "diffusers>=0.42", "accelerate"], check=False)
+import gc, json, os, subprocess, sys, threading, time
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-U", "diffusers>=0.42", "transformers", "accelerate"], check=False)
 import torch
-from diffusers import StableDiffusionXLPipeline, AutoencoderKL, DPMSolverMultistepScheduler
+from diffusers import AutoencoderKL, ZImagePipeline, ZImageTransformer2DModel
+MODEL = "Tongyi-MAI/Z-Image-Turbo"
 ROWS = json.loads(__ROWS__)
-NEG = __NEG__
+SIZE = __SIZE__
 OUT = "/kaggle/working/candidates"; os.makedirs(OUT, exist_ok=True)
-print(torch.cuda.device_count(), torch.cuda.get_device_name(0), len(ROWS), "images", flush=True)
-vae = AutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix", torch_dtype=torch.float16)
+ngpu = torch.cuda.device_count()
+print(ngpu, torch.cuda.get_device_name(0), len(ROWS), "images", flush=True)
+t0 = time.time()
 
-def load(dev):
-    p = StableDiffusionXLPipeline.from_pretrained("SG161222/RealVisXL_V5.0", vae=vae, torch_dtype=torch.float16)
-    p.scheduler = DPMSolverMultistepScheduler.from_config(p.scheduler.config, use_karras_sigmas=True, algorithm_type="sde-dpmsolver++")
-    return p.to(dev)
+# ---- phase 1: encode all prompts once
+pipe = ZImagePipeline.from_pretrained(MODEL, torch_dtype=torch.bfloat16)
+pipe.text_encoder.to("cuda:0")
+emb = {}
+with torch.no_grad():
+    for r in ROWS:
+        pe, _ = pipe.encode_prompt(prompt=r["prompt"], device="cuda:0", do_classifier_free_guidance=False)
+        emb[r["file"]] = [e.to("cpu") for e in pe]
+pipe.text_encoder = None
+gc.collect(); torch.cuda.empty_cache()
+print(f"phase 1 done {time.time()-t0:.0f}s", flush=True)
 
-# two T4s -> two pipelines, images alternate between them (threads release the GIL inside CUDA)
-import threading
-devs = [f"cuda:{i}" for i in range(torch.cuda.device_count())]
-pipes = [load(d) for d in devs]
+# ---- phase 2: one transformer per GPU
+pipes = []
+for g in range(ngpu):
+    dev = f"cuda:{g}"
+    if g == 0:
+        pipe.transformer.to(dev); pipe.vae.to(dev); p = pipe
+    else:
+        tr = ZImageTransformer2DModel.from_pretrained(MODEL, subfolder="transformer", torch_dtype=torch.bfloat16).to(dev)
+        vae = AutoencoderKL.from_pretrained(MODEL, subfolder="vae", torch_dtype=torch.bfloat16).to(dev)
+        p = ZImagePipeline(scheduler=pipe.scheduler.__class__.from_config(pipe.scheduler.config), vae=vae,
+                           text_encoder=None, tokenizer=None, transformer=tr)
+    pipes.append((p, dev))
+print(f"phase 2 ready {time.time()-t0:.0f}s", flush=True)
 meta, lock = [], threading.Lock()
 
-def worker(wi):
-    pipe, dev = pipes[wi], devs[wi]
-    for r in ROWS[wi::len(devs)]:
-        name = f"{r['cell']}_{r['cand']}.png"
-        if os.path.exists(os.path.join(OUT, name)):
+def worker(g):
+    p, dev = pipes[g]
+    for r in ROWS[g::ngpu]:
+        path = os.path.join(OUT, r["file"])
+        if os.path.exists(path):
             continue
         t = time.time()
-        img = pipe(prompt=r["prompt"], negative_prompt=NEG, num_inference_steps=30, guidance_scale=5.0, height=1024, width=1024,
-                   generator=torch.Generator(dev).manual_seed(int(r["seed"]))).images[0]
-        img.save(os.path.join(OUT, name))
+        with torch.no_grad():
+            img = p(prompt_embeds=[e.to(dev) for e in emb[r["file"]]], height=SIZE, width=SIZE, num_inference_steps=9,
+                    guidance_scale=0.0, generator=torch.Generator("cpu").manual_seed(int(r["seed"]))).images[0]
+        img.save(path)
         with lock:
-            meta.append(dict(r, file=name, sec=round(time.time() - t, 1)))
-            print(name, f"{time.time() - t:.1f}s", len(meta), flush=True)
+            meta.append(dict(r, sec=round(time.time() - t, 1)))
+            json.dump(meta, open(os.path.join(OUT, "meta.json"), "w"), indent=1)
+            print(r["file"], f"{time.time() - t:.0f}s", len(meta), flush=True)
 
-th = [threading.Thread(target=worker, args=(i,)) for i in range(len(devs))]
+th = [threading.Thread(target=worker, args=(g,)) for g in range(ngpu)]
 [t.start() for t in th]; [t.join() for t in th]
-json.dump(meta, open(os.path.join(OUT, "meta.json"), "w"), indent=1)
-print("done", len(meta))
+print("done", len(meta), f"{time.time()-t0:.0f}s")
 '''
 
 
@@ -82,17 +112,22 @@ def main():
     ap.add_argument("--shard", type=int, default=0)
     ap.add_argument("--nshards", type=int, default=1)
     ap.add_argument("--k", type=int, default=2, help="candidates per design cell")
+    ap.add_argument("--size", type=int, default=768)
+    ap.add_argument("--cells", nargs="*", help="only these design cells (e.g. regeneration)")
+    ap.add_argument("--seed-offset", type=int, default=0)
+    ap.add_argument("--slug", default=None)
     ap.add_argument("-o", "--out", required=True)
     a = ap.parse_args()
     rows = build(k=a.k)
     cells = sorted({r["cell"] for r in rows})
-    mine = set(cells[a.shard::a.nshards])
-    rows = [dict(r, prompt=prompt(r)) for r in rows if r["cell"] in mine]
+    mine = set(a.cells) if a.cells else set(cells[a.shard::a.nshards])
+    rows = [dict(r, seed=r["seed"] + a.seed_offset, prompt=prompt(r), file=f"{r['cell']}_{r['cand'] + a.seed_offset}.png")
+            for r in rows if r["cell"] in mine]
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
-    code = KERNEL.replace("__ROWS__", repr(json.dumps(rows))).replace("__NEG__", repr(NEG))
+    code = KERNEL.replace("__ROWS__", repr(json.dumps(rows))).replace("__SIZE__", str(a.size))
     (out / "gen.py").write_text(code)
-    slug = f"mooney-gen-shard{a.shard}"
+    slug = a.slug or f"mooney-gen-shard{a.shard}"
     json.dump({"id": f"{a.account}/{slug}", "title": slug, "code_file": "gen.py", "language": "python",
                "kernel_type": "script", "is_private": True, "enable_gpu": True, "enable_internet": True,
                "machine_shape": "NvidiaTeslaT4", "dataset_sources": [], "competition_sources": [],

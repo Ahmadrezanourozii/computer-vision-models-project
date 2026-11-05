@@ -104,19 +104,19 @@ LIGHT_GT = {"left": "from the left", "right": "from the right", "top": "from abo
 
 
 def vlm_metrics(tabs, meta):
-    m = meta.set_index("id")
+    gt = meta.set_index("id")[["light", "gender", "age", "pose_label"]].add_prefix("gt_")
     res = {}
     for s, t in tabs.items():
-        t = t.join(m[["light", "gender", "age", "pose_label"]], how="inner")
+        t = t.join(gt, how="inner")
         res[s] = dict(
             n=len(t),
             mentions_face=t.mentions_face.mean(),
             says_face=(t.contains_face == "yes").mean(),
             face_conf=t.face_confidence.mean(),
-            gender_acc=(t.gender == t.gender_y).mean() if "gender_y" in t else (t["gender"] == m.loc[t.index, "gender"]).mean(),
-            age_acc=(t.age_group == t.age).mean(),
-            light_acc=(t.light_direction == t.light.map(LIGHT_GT)).mean(),
-            orientation_acc=(t.face_orientation == t.pose_label).mean(),
+            gender_acc=(t.gender == t.gt_gender).mean(),
+            age_acc=(t.age_group == t.gt_age).mean(),
+            light_acc=(t.light_direction == t.gt_light.map(LIGHT_GT)).mean(),
+            orientation_acc=(t.face_orientation == t.gt_pose_label).mean(),
             black_is_shadow=(t.black_regions_are == "mostly shadows").mean(),
         )
     return pd.DataFrame(res)
@@ -128,7 +128,8 @@ def face_metrics(res_dir, meta):
     so = pd.read_csv(base / "Original" / "summary.csv").set_index("image")
     sm = pd.read_csv(base / "Mooney" / "summary.csv").set_index("image")
     eo = dict(np.load(base / "Original" / "embeddings.npz"))
-    em = dict(np.load(base / "Mooney" / "embeddings.npz"))
+    em = {k: v for k, v in np.load(base / "Mooney" / "embeddings.npz").items()
+          if k in sm.index and bool(sm.loc[k, "detected"])}          # only real detections (score >= 0.5)
     oracle_path = base / "Mooney" / "embeddings_oracle_aligned.npz"
     eor = dict(np.load(oracle_path)) if oracle_path.exists() else {}
     ids = [k for k in meta["id"] if k in eo]

@@ -122,18 +122,18 @@ def contact_sheet(files, out_path, cols=10, thumb=200, labels=True, pad=4, bg=(1
 def parameter_sweep(image, blurs, whites, out_path, thumb=256, invert=False):
     """Grid showing the effect of the two controls (rows: blur, columns: % white)."""
     font = _font(max(12, thumb // 12))
-    head = 34
-    W = len(whites) * thumb + head * 3
+    head, left = 34, 130
+    W = len(whites) * thumb + left
     H = len(blurs) * thumb + head
     sheet = Image.new("RGB", (W, H), (255, 255, 255))
     d = ImageDraw.Draw(sheet)
     for j, wp in enumerate(whites):
-        d.text((head * 3 + j * thumb + thumb // 2 - 30, 8), f"{wp:g}% white", fill=(0, 0, 0), font=font)
+        d.text((left + j * thumb + thumb // 2 - 45, 8), f"{wp:g}% white", fill=(0, 0, 0), font=font)
     for i, b in enumerate(blurs):
         d.text((6, head + i * thumb + thumb // 2 - 10), f"blur {b:g}%", fill=(0, 0, 0), font=font)
         for j, wp in enumerate(whites):
             m, _ = make_mooney(image, MooneyParams(blur=b, white_percent=wp, invert=invert))
             im = Image.fromarray(m).convert("RGB").resize((thumb - 4, thumb - 4), Image.LANCZOS)
-            sheet.paste(im, (head * 3 + j * thumb + 2, head + i * thumb + 2))
+            sheet.paste(im, (left + j * thumb + 2, head + i * thumb + 2))
     sheet.save(out_path, quality=92)
     return out_path
