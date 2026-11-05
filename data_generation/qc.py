@@ -86,10 +86,20 @@ def yaw_label(yaw, thr=12.0):
     return "turned toward image right" if yaw > 0 else "turned toward image left"
 
 
+def border_brightness(gray, frac=0.03):
+    """Mean luminance of a thin frame around the image (generation artefacts such as white bars)."""
+    h, w = gray.shape
+    b = max(2, int(frac * min(h, w)))
+    band = np.concatenate([gray[:b].ravel(), gray[-b:].ravel(), gray[:, :b].ravel(), gray[:, -b:].ravel()])
+    return float(band.mean())
+
+
 def analyse(app, img_bgr):
     """Run detection + lighting analysis on one BGR image; returns a dict of measurements."""
     faces = sorted(app.get(img_bgr), key=lambda f: -f.det_score)
-    out = dict(n_faces=sum(f.det_score >= 0.5 for f in faces), det_score=float(faces[0].det_score) if faces else 0.0)
+    g = img_bgr[..., ::-1].astype(np.float32) @ np.array([0.299, 0.587, 0.114], np.float32) / 255.0
+    out = dict(n_faces=sum(f.det_score >= 0.5 for f in faces), det_score=float(faces[0].det_score) if faces else 0.0,
+               border=border_brightness(g))
     if not faces:
         return out
     f = faces[0]
@@ -102,5 +112,5 @@ def analyse(app, img_bgr):
     out.update(bbox=[float(v) for v in f.bbox], face_frac=float(mask.mean()), light_angle=angle, light_strength=strength,
                light_dir=d, light_dir_err=err, light_dir_landmarks=lm_dir, lm_lr=lr, lm_tb=tb,
                face_contrast=contrast, yaw=yaw, pitch=pitch, roll=roll,
-               sex=f.get("sex"), age=int(f.age) if f.get("age") is not None else None)
+               est_sex=f.get("sex"), est_age=int(f.age) if f.get("age") is not None else None)
     return out

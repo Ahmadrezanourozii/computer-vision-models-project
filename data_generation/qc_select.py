@@ -30,6 +30,7 @@ def main():
     ap.add_argument("--max-angle-err", type=float, default=50.0)
     ap.add_argument("--min-det", type=float, default=0.6)
     ap.add_argument("--exclude", nargs="*", default=[], help="candidate files rejected by visual inspection")
+    ap.add_argument("--reuse", action="store_true", help="reuse measurements from REPORT/candidates_qc.csv")
     a = ap.parse_args()
 
     from insightface.app import FaceAnalysis
@@ -39,8 +40,21 @@ def main():
     meta = []
     for folder in a.candidates:
         meta += [dict(m, folder=folder) for m in json.load(open(Path(folder) / "meta.json"))]
+    cache = {}
+    cache_file = Path(a.report) / "candidates_qc.csv"
+    if a.reuse and cache_file.exists():
+        old = pd.read_csv(cache_file)
+        meas = [c for c in old.columns if c not in meta[0] and c not in ("folder", "angle_err", "valid", "landmarks_agree")]
+        for _, rr in old.iterrows():
+            d = {c: rr[c] for c in meas}
+            if isinstance(d.get("bbox"), str):
+                d["bbox"] = json.loads(d["bbox"])
+            cache[rr["file"]] = d
     rows = []
     for m in meta:
+        if m["file"] in cache:
+            rows.append(dict(m, **cache[m["file"]]))
+            continue
         img = cv2.imread(str(Path(m["folder"]) / m["file"]))
         r = analyse(app, img)
         rows.append(dict(m, **r, img_size=img.shape[0]))
@@ -57,6 +71,8 @@ def main():
         The chin test is skipped for beards/moustaches (dark albedo there, independent of the light)."""
         if pd.isna(r.get("lm_lr")):
             return False
+        if r["light"] in ("left", "right") and abs(r.get("yaw") or 0) > 20:
+            return True          # cheek disks are unreliable on clearly turned heads: rely on the gradient check
         if r["light"] == "left":
             return r["lm_lr"] > 0.05
         if r["light"] == "right":
@@ -67,9 +83,11 @@ def main():
         return beard or r["lm_tb"] < -0.05
     df["landmarks_agree"] = df.apply(landmark_ok, axis=1)
     df["valid"] = (df.n_faces == 1) & (df.det_score >= a.min_det) & (df.angle_err <= a.max_angle_err) & \
-                  df.landmarks_agree & (~df.file.isin(a.exclude))
+                  df.landmarks_agree & (df.border < 0.12) & (~df.file.isin(a.exclude))
     Path(a.report).mkdir(parents=True, exist_ok=True)
-    df.drop(columns=["prompt"]).to_csv(Path(a.report) / "candidates_qc.csv", index=False)
+    rep = df.drop(columns=["prompt"]).copy()
+    rep["bbox"] = rep["bbox"].apply(lambda b: json.dumps(list(b)) if isinstance(b, (list, tuple, np.ndarray)) else b)
+    rep.to_csv(Path(a.report) / "candidates_qc.csv", index=False)
 
     chosen = (df[df.valid].sort_values("light_strength", ascending=False).groupby("cell").head(1)
               .sort_values("cell"))
