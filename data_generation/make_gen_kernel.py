@@ -49,7 +49,18 @@ os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-U", "diffusers>=0.42", "transformers", "accelerate"], check=False)
 import torch
 from diffusers import AutoencoderKL, ZImagePipeline, ZImageTransformer2DModel
+import diffusers.models.transformers.transformer_z_image as tz
 MODEL = "Tongyi-MAI/Z-Image-Turbo"
+
+# Memory-saving attention: the 12 GB transformer leaves ~2 GB on a T4, too little for the full
+# (heads x seq x seq) attention matrix at 768 px.  Queries are processed in chunks (exact result).
+_attn = tz.dispatch_attention_fn
+def chunked_attention(query, key, value, attn_mask=None, **kw):
+    n, step = query.shape[1], 640                          # layout [batch, seq, heads, dim]
+    if n <= step:
+        return _attn(query, key, value, attn_mask=attn_mask, **kw)
+    return torch.cat([_attn(query[:, i:i + step], key, value, attn_mask=attn_mask, **kw) for i in range(0, n, step)], dim=1)
+tz.dispatch_attention_fn = chunked_attention
 ROWS = json.loads(__ROWS__)
 SIZE = __SIZE__
 OUT = "/kaggle/working/candidates"; os.makedirs(OUT, exist_ok=True)
