@@ -1,18 +1,14 @@
 """Pilot B: Z-Image-Turbo in bfloat16 on 2x T4 (no native bf16) - is it fast enough?"""
 import json, os, subprocess, sys, time
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-U", "diffusers>=0.42", "transformers", "accelerate"], check=False)
 import torch, numpy as np
 print("torch", torch.__version__, torch.cuda.device_count(), torch.cuda.get_device_name(0), flush=True)
 from diffusers import ZImagePipeline
 OUT = "/kaggle/working/pilot_zimg"; os.makedirs(OUT, exist_ok=True)
 t0 = time.time()
-try:
-    pipe = ZImagePipeline.from_pretrained("Tongyi-MAI/Z-Image-Turbo", torch_dtype=torch.bfloat16, device_map="balanced")
-    print("device_map balanced:", getattr(pipe, "hf_device_map", None), flush=True)
-except Exception as e:
-    print("balanced failed:", repr(e)[:300], flush=True)
-    pipe = ZImagePipeline.from_pretrained("Tongyi-MAI/Z-Image-Turbo", torch_dtype=torch.bfloat16)
-    pipe.enable_model_cpu_offload()
+pipe = ZImagePipeline.from_pretrained("Tongyi-MAI/Z-Image-Turbo", torch_dtype=torch.bfloat16)
+pipe.enable_model_cpu_offload()
 print(f"load {time.time()-t0:.1f}s", flush=True)
 TEMPLATE = ("Low-key studio portrait photograph of a {who}, {pose}, neutral expression, wearing a plain black shirt, "
             "head and shoulders framing. Lighting: {light}. No other light, no fill light. Pure black background, "
@@ -27,7 +23,7 @@ meta = []
 for i, (who, pose) in enumerate(ids):
     for lname, lp in lights.items():
         t = time.time()
-        img = pipe(prompt=TEMPLATE.format(who=who, pose=pose, light=lp), height=1024, width=1024, num_inference_steps=9,
+        img = pipe(prompt=TEMPLATE.format(who=who, pose=pose, light=lp), height=768, width=768, num_inference_steps=9,
                    guidance_scale=0.0, generator=torch.Generator("cpu").manual_seed(3000 + i)).images[0]
         a = np.asarray(img).astype(float)
         name = f"z{i}_{lname}.png"; img.save(os.path.join(OUT, name))
