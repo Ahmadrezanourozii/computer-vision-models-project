@@ -47,10 +47,10 @@ def main():
                          f"normals off by {D['normal_err']:.0f}°). It follows the paint instead: white = near (partial r = "
                          f"{f(D['partial_pattern'])} with the white pattern). The 3D relief is an embossed blob, not a face.")
     if V:
-        V["takeaway"] = (f"Qwen3-VL calls {p(vm.get('says_face'))} of the Mooneys a face (originals {p(vo.get('says_face'))}) and names a face, "
-                         f"head or person in {p(vm.get('mentions_face'))} of its unprimed descriptions; otherwise it sees ghosts, skulls, "
-                         f"hands or abstract shapes. Gender, age and light direction collapse ({p(vm.get('gender_acc'))}, "
-                         f"{p(vm.get('age_acc'))}, {p(vm.get('light_acc'))}), and the black regions are never called shadows.")
+        V["takeaway"] = (f"Qwen3-VL calls {p(vm.get('says_face'))} of the Mooneys a face (originals {p(vo.get('says_face'))}); otherwise it "
+                         f"sees ears, hands, ghosts or abstract shapes. Gender and age collapse ({p(vm.get('gender_acc'))}, "
+                         f"{p(vm.get('age_acc'))}) and the black regions are never called shadows. Even for the originals the light "
+                         f"direction is weak ({p(vo.get('light_acc'))}): it nearly always answers 'from the left' or 'from the front'.")
     if F:
         F["takeaway"] = (f"SCRFD finds {p(F['det_rate_mooney'])} of the Mooney faces (originals {p(F['det_rate_orig'])}). Even when the Mooney "
                          f"is aligned with the original's key points, ArcFace picks the right person out of 100 in only "
@@ -62,19 +62,19 @@ def main():
     if Hh0 and V and M:
         fs, vb = Hh0["face_share_by_light"], V.get("mooney_says_face_by_light", {})
         Hh0["points"] = [
-            f"Human observer (the author, blind to the originals, n = 1): a face (rating ≥ 4) in {p(fs['top'])} of the top-lit, "
+            f"Human observer (the author, n = 1, each Mooney rated alone, without its original): a face (rating ≥ 4) in {p(fs['top'])} of the top-lit, "
             f"{p(fs['left'])}/{p(fs['right'])} of the left/right-lit and {p(fs['bottom'])} of the bottom-lit Mooneys.",
             f"Qwen3-VL shows the same order: 'contains a face' for {p(vb.get('top'))} of the top-lit vs. {p(vb.get('bottom'))} of "
             "the bottom-lit Mooneys.",
-            f"Marigold even on the ORIGINAL photos explains bottom-lit contrast less as shading ({M['by_light_shadow_orig']['bottom']:.2f} "
-            f"vs. {min(M['by_light_shadow_orig'][l] for l in ['left','right','top']):.2f}–{max(M['by_light_shadow_orig'][l] for l in ['left','right','top']):.2f}): "
-            "its prior expects light from above.",
+            f"Marigold, even on the ORIGINAL photos, explains bottom-lit contrast less as shading ({M['by_light_shadow_orig']['bottom']:.2f} "
+            f"vs. {min(M['by_light_shadow_orig'][l] for l in ['left','right','top']):.2f}–{max(M['by_light_shadow_orig'][l] for l in ['left','right','top']):.2f}; "
+            "also when the hairline is excluded): consistent with a light-from-above prior.",
             ("First Mooney version (no crop, 10% white): same ranking in the blind ratings (mean top "
              f"{Hh0['v1_mean_by_light']['top']:.1f} vs. bottom {Hh0['v1_mean_by_light']['bottom']:.1f}).") if "v1_mean_by_light" in Hh0 else "",
         ]
         Hh0["points"] = [x for x in Hh0["points"] if x]
         Hh0["takeaway"] = ("H2 supported: light from below removes the face for the human observer and for the VLM, and the "
-                           "inverse-rendering model itself assumes light from above.")
+                           "inverse-rendering model behaves as if light came from above.")
         corr = Hh0["corr_with_human"]
         cv = corr.get("VLM face confidence", {})
         ca = corr.get("ArcFace similarity to original", {})
@@ -120,8 +120,8 @@ def main():
                 "Inverse rendering: normals; are black regions explained as shadow or as albedo?"]),
         ],
         approach_question=("Hypotheses. H1: humans see a 3D face in a good Mooney image (Paper 1: inverse rendering of shape + "
-                           "extreme light); feed-forward vision models do not. H2 (light-from-above prior): humans find faces "
-                           "lit from below harder; do vision models show the same bias, i.e. worse results for bottom-lit Mooneys?"),
+                           "extreme light); feed-forward vision models do not. H2 (light-from-above prior; Ramachandran 1988, Johnston et "
+                           "al. 1992): humans find faces lit from below harder; do vision models show the same bias for bottom-lit Mooneys?"),
         top10=top10,
         top10_note=("Picked by the author from all 100 Mooneys after a blind 1–5 face rating. Several picks had been rated low "
                     "before the originals were revealed: once the face is known, the Mooney becomes readable (the classic Mooney "
@@ -272,6 +272,9 @@ def main():
             "Marigold v1-1 normals and intrinsic image decomposition models, 2025.",
             "[8] Tongyi-MAI. Z-Image: an efficient image generation foundation model with single-stream diffusion transformer, 2025.",
             "[9] O. M. Parkhi, A. Vedaldi, A. Zisserman. Deep face recognition (VGG-Face). BMVC 2015.",
+            "[10] V. S. Ramachandran. Perception of shape from shading. Nature 331, 163–166, 1988.",
+            "[11] A. Johnston, H. Hill, N. Carman. Recognising faces: effects of lighting direction, inversion, and brightness "
+            "reversal. Perception 21, 365–375, 1992.",
             "Code: github.com/Ahmadrezanourozii/computer-vision-models-project",
         ],
     )
