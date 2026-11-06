@@ -87,7 +87,7 @@ def main():
 
     top10 = [dict(orig=str(data / "Original" / f"{k}.jpg"), mooney=str(data / "Mooney" / f"{k}.png"),
                   label=f"{k.replace('face_', '#')} · {meta.loc[k, 'light']}") for k in sel]
-    order = ["face_047", "face_035", "face_088", "face_100", "face_085", "face_022", "face_008", "face_019", "face_046"]
+    order = ["face_031", "face_029", "face_010", "face_004", "face_027", "face_033", "face_048", "face_054", "face_058"]
     order = [k for k in order if k in sel] + [k for k in sel if k not in order]
     mosaic = [str(data / "Mooney" / f"{k}.png") for k in order[:9]]
 
@@ -123,9 +123,9 @@ def main():
                            "extreme light); feed-forward vision models do not. H2 (light-from-above prior; Ramachandran 1988, Johnston et "
                            "al. 1992): humans find faces lit from below harder; do vision models show the same bias for bottom-lit Mooneys?"),
         top10=top10,
-        top10_note=("Picked by the author from all 100 Mooneys after a blind 1–5 face rating. Several picks had been rated low "
-                    "before the originals were revealed: once the face is known, the Mooney becomes readable (the classic Mooney "
-                    "'aha' effect)."),
+        top10_note=("The 10 Mooneys most clearly seen as a face in the author's blind 1–5 rating (done before the originals "
+                    "were shown): both images rated 5, then 8 of the 16 rated 4. All ten happen to be lit from "
+                    "above, in line with the light-from-above prior."),
         top10_criteria=[
             dict(head="Readable, not trivial", text="A face appears for a human observer, but no single blob is a face part on its own."),
             dict(head="Large coherent blobs", text="Shadows form a few big regions: no speckle from skin texture, hair strands or clothing."),
