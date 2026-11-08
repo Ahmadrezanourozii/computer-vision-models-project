@@ -121,7 +121,8 @@ def main():
         ],
         approach_question=("Hypotheses. H1: humans see a 3D face in a good Mooney image (Paper 1: inverse rendering of shape + "
                            "extreme light); feed-forward vision models do not. H2 (light-from-above prior; Ramachandran 1988, Johnston et "
-                           "al. 1992): humans find faces lit from below harder; do vision models show the same bias for bottom-lit Mooneys?"),
+                           "al. 1992): bottom-lit Mooneys are hard by design (not 'good' Mooneys) and test the inverse-rendering account: humans should "
+                           "fail on them; do vision models show the same bias?"),
         top10=top10,
         top10_note=("The 10 Mooneys most clearly seen as a face in the author's blind 1–5 rating (done before the originals "
                     "were shown): both images rated 5, then 8 of the 16 rated 4. All ten happen to be lit from "
