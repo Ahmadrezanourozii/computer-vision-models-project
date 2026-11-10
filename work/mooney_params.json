@@ -1,1 +1,1 @@
-{"blur": 1.5, "white_percent": 15, "crop_factor": 1.7, "size": 512, "chosen_by": "global sweep on the face-centred crops (work/sweep_crop: 83% of images with balanced face white share) + visual check"}
+{"blur": 0.7, "white_percent": 10, "crop_factor": 1.7, "size": 512, "chosen_by": "reduced after the lecturer's feedback on v2 (blur 1.5 %, 15 % white: too much blur, age/beard/glasses lost); sweep on good and bad v2 examples + visual check"}
