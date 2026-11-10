@@ -27,6 +27,7 @@ def main():
     ap.add_argument("--analysis", default="work/analysis")
     ap.add_argument("--shots", default="work/shots")
     ap.add_argument("--selection", default="work/selection.json")
+    ap.add_argument("--ratings", default=None)
     ap.add_argument("--params", default="work/mooney_params.json")
     ap.add_argument("-o", "--out", default="work/deck_input.json")
     a = ap.parse_args()
@@ -43,54 +44,60 @@ def main():
 
     Hh0 = S.get("human", {})
     if D:
-        D["takeaway"] = (f"Inside the face, depth predicted from the Mooney does not match the original's depth (mean r = {f(D['r_mean'])}, "
-                         f"normals off by {D['normal_err']:.0f}°). It follows the paint instead: white = near (partial r = "
-                         f"{f(D['partial_pattern'])} with the white pattern). The 3D relief is an embossed blob, not a face.")
+        D["takeaway"] = (f"Inside the face, depth predicted from the Mooney only partly matches the original's depth (mean r = {f(D['r_mean'])}, "
+                         f"normals off by {D['normal_err']:.0f}°). Part of it follows the paint: white = near (partial r = "
+                         f"{f(D['partial_pattern'])} with the white pattern). A coarse head shape survives; the facial relief does not.")
     if V:
-        V["takeaway"] = (f"Qwen3-VL calls {p(vm.get('says_face'))} of the Mooneys a face (originals {p(vo.get('says_face'))}); otherwise it "
-                         f"sees ears, hands, ghosts or abstract shapes. Gender and age collapse ({p(vm.get('gender_acc'))}, "
-                         f"{p(vm.get('age_acc'))}) and the black regions are never called shadows. Even for the originals the light "
-                         f"direction is weak ({p(vo.get('light_acc'))}): it nearly always answers 'from the left' or 'from the front'.")
+        V["takeaway"] = (f"Qwen3-VL calls {p(vm.get('says_face'))} of the Mooneys a face (originals {p(vo.get('says_face'))}), but as a flat "
+                         f"'abstract silhouette', sometimes a skull or a mask. Gender and age stay 'unclear' (correct: {p(vm.get('gender_acc'))}, "
+                         f"{p(vm.get('age_acc'))}) and the black regions are never called shadows ({p(vm.get('black_is_shadow'))}; originals "
+                         f"{p(vo.get('black_is_shadow'))}). Even for the originals the light direction is weak ({p(vo.get('light_acc'))}).")
     if F:
-        F["takeaway"] = (f"SCRFD finds {p(F['det_rate_mooney'])} of the Mooney faces (originals {p(F['det_rate_orig'])}). Even when the Mooney "
-                         f"is aligned with the original's key points, ArcFace picks the right person out of 100 in only "
-                         f"{p(F['rank1_oracle'])} of the cases (chance 1%; top-10: {p(F['cmc_oracle'][9])} vs. 10%).")
+        F["takeaway"] = (f"SCRFD finds {p(F['det_rate_mooney'])} of the Mooney faces (originals {p(F['det_rate_orig'])}). When the Mooney is "
+                         f"aligned with the original's key points, ArcFace picks the right person out of 100 in {p(F['rank1_oracle'])} of "
+                         f"the cases (chance 1%; top-10: {p(F['cmc_oracle'][9])} vs. 10%): some identity information survives, but the "
+                         "system cannot use it without first finding the face.")
     if M:
         M["takeaway"] = (f"For originals {M['shadow_index_orig']:.2f} of the white/black contrast is explained as shading, for Mooneys only "
-                         f"{M['shadow_index_mooney']:.2f}: the black regions are read as dark paint (albedo) and the normals are flat "
-                         f"({M['normal_err']:.0f}° error). Humans read the same black regions as shadows.")
+                         f"{M['shadow_index_mooney']:.2f}: the black regions are mostly read as dark paint (albedo), although the normals "
+                         f"keep a rough head shape ({M['normal_err']:.0f}° error). Humans read the same black regions as shadows.")
     if Hh0 and V and M:
         fs, vb = Hh0["face_share_by_light"], V.get("mooney_says_face_by_light", {})
+        fb = F.get("rank1_oracle_by_light", {}) if F else {}
         Hh0["points"] = [
-            f"Human observer (the author, n = 1, each Mooney rated alone, without its original): a face (rating ≥ 4) in {p(fs['top'])} of the top-lit, "
-            f"{p(fs['left'])}/{p(fs['right'])} of the left/right-lit and {p(fs['bottom'])} of the bottom-lit Mooneys.",
-            f"Qwen3-VL shows the same order: 'contains a face' for {p(vb.get('top'))} of the top-lit vs. {p(vb.get('bottom'))} of "
-            "the bottom-lit Mooneys.",
+            f"Human observer (the author, n = 1, each Mooney rated alone, without its original): a face (rating ≥ 4) in {p(fs['right'])}/{p(fs['left'])} "
+            f"of the right/left-lit, {p(fs['top'])} of the top-lit and {p(fs['bottom'])} of the bottom-lit Mooneys.",
+            f"Machines: bottom light is also the worst case. Qwen3-VL 'contains a face': {p(vb.get('bottom'))} (bottom) vs. "
+            f"{p(vb.get('top'))} (top); ArcFace rank-1: {p(fb.get('bottom'))} vs. {p(fb.get('top'))}.",
             f"Marigold, even on the ORIGINAL photos, explains bottom-lit contrast less as shading ({M['by_light_shadow_orig']['bottom']:.2f} "
             f"vs. {min(M['by_light_shadow_orig'][l] for l in ['left','right','top']):.2f}–{max(M['by_light_shadow_orig'][l] for l in ['left','right','top']):.2f}; "
             "also when the hairline is excluded): consistent with a light-from-above prior.",
-            ("First Mooney version (no crop, 10% white): same ranking in the blind ratings (mean top "
-             f"{Hh0['v1_mean_by_light']['top']:.1f} vs. bottom {Hh0['v1_mean_by_light']['bottom']:.1f}).") if "v1_mean_by_light" in Hh0 else "",
+            "Top light is not the best case for the human here: with 10 % white, top-lit Mooneys keep mainly forehead, nose and "
+            "cheekbones, while side light keeps a half face with eye, nose and mouth.",
         ]
-        Hh0["points"] = [x for x in Hh0["points"] if x]
-        Hh0["takeaway"] = ("H2 supported: light from below removes the face for the human observer and for the VLM, and the "
-                           "inverse-rendering model behaves as if light came from above.")
+        Hh0["takeaway"] = ("H2 partly supported: light from below is the hardest condition for the human observer, the VLM and "
+                           "ArcFace, and the inverse-rendering model behaves as if light came from above.")
         corr = Hh0["corr_with_human"]
         cv = corr.get("VLM face confidence", {})
         ca = corr.get("ArcFace similarity to original", {})
-        S["summary_title"] = "Summary: machines see paint, not faces"
-        S["summary_takeaway"] = (f"Per image, only Qwen3-VL's face confidence follows the human ratings (ρ = {cv.get('rho', 0):.2f}, 95% CI "
-                                 f"{cv.get('lo', 0):.2f}–{cv.get('hi', 0):.2f}), ArcFace weakly ({ca.get('rho', 0):.2f}). No system recovers "
-                                 "3D shape or lighting from a Mooney face; consistent with Paper 1, feed-forward models lack the "
-                                 "inverse-rendering explanation (shape + extreme light) that humans seem to use.")
+        S["summary_title"] = "Summary: machines find a face-like pattern, not a lit 3D face"
+        S["summary_takeaway"] = (f"Detection fails ({p(F['det_rate_mooney'])}), the VLM names a face in {p(vm.get('says_face'))} but never a "
+                                 f"shadow, and inverse rendering reads black as paint. Per image, only ArcFace similarity follows the human "
+                                 f"ratings (ρ = {ca.get('rho', 0):.2f}, 95% CI {ca.get('lo', 0):.2f}–{ca.get('hi', 0):.2f}); VLM confidence does not "
+                                 f"(ρ = {cv.get('rho', 0):.2f}). Consistent with Paper 1: feed-forward models lack the inverse-rendering "
+                                 "explanation (shape + extreme light) that humans seem to use.")
         S["human"] = Hh0
 
     top10 = [dict(orig=str(data / "Original" / f"{k}.jpg"), mooney=str(data / "Mooney" / f"{k}.png"),
                   label=f"{k.replace('face_', '#')} · {meta.loc[k, 'light']}") for k in sel]
-    order = ["face_031", "face_029", "face_010", "face_004", "face_027", "face_033", "face_048", "face_054", "face_058"]
-    order = [k for k in order if k in sel] + [k for k in sel if k not in order]
+    order = list(sel)
     mosaic = [str(data / "Mooney" / f"{k}.png") for k in order[:9]]
 
+    _r = json.load(open(a.ratings))["blind"] if getattr(a, "ratings", None) else {}
+    _lights = [meta.loc[k, "light"] for k in sel]
+    top10_note = ("Picked by the author from all 100 Mooneys after the blind 1–5 face rating (done before the originals were shown)"
+                  + (f"; {sum(_r.get(k, 0) >= 4 for k in sel)} of the 10 were rated 4 or 5" if _r else "") + ". "
+                  + ", ".join(f"{_lights.count(l)} {l}-lit" for l in ["right", "left", "top", "bottom"] if _lights.count(l)) + ".")
     deck = dict(
         title="Do Modern Vision Systems Perceive Faces in Mooney Images?",
         subtitle=(f"Four state-of-the-art vision systems tested on {n} photorealistic portraits under extreme "
@@ -109,8 +116,8 @@ def main():
                 "Grayscale → Gaussian blur → threshold at the luminance percentile that leaves w % of the pixels white "
                 "(closed form of the threshold search in Egger et al.)",
                 f"Same parameters for all images: σ = {blur:g} % of the image side, {white:g} % white (global sweep + visual check)",
-                "Face-centred crops (1.7× face box, 512 px) normalise head size; v1 without crop was too hard for the "
-                "blind human check (13% rated ≥ 3) and was revised",
+                "Face-centred crops (1.7× face box, 512 px) normalise head size",
+                "Revised after lecturer feedback: σ 1.5 %, 15 % white lost age, beard and glasses, so both were reduced",
                 "GUI (live sliders, batch, top-10 picker) + CLI (batch 100+ images, CSV log); 3D-mesh input"]),
             dict(head="Evaluation", lines=[
                 "All originals and Mooneys through 4 systems with an identical protocol",
@@ -124,9 +131,7 @@ def main():
                            "al. 1992): bottom-lit Mooneys are hard by design (not 'good' Mooneys) and test the inverse-rendering account: humans should "
                            "fail on them; do vision models show the same bias?"),
         top10=top10,
-        top10_note=("The 10 Mooneys most clearly seen as a face in the author's blind 1–5 rating (done before the originals "
-                    "were shown): both images rated 5, then 8 of the 16 rated 4. All ten happen to be lit from "
-                    "above, in line with the light-from-above prior."),
+        top10_note=top10_note,
         top10_criteria=[
             dict(head="Readable, not trivial", text="A face appears for a human observer, but no single blob is a face part on its own."),
             dict(head="Large coherent blobs", text="Shadows form a few big regions: no speckle from skin texture, hair strands or clothing."),
@@ -153,7 +158,7 @@ def main():
     # --- system 1 depth
     if D:
         deck["results"].append(dict(
-            system="Depth Anything V2", title="Depth: the Mooney is read as an embossed pattern",
+            system="Depth Anything V2", title="Depth: a coarse head, partly an embossed pattern",
             panel=str(A / "depth_examples.png"),
             panel_caption="Original → predicted depth → depth rendered as 3D relief; right: the same for its Mooney image.",
             stats=[dict(big=f"r = {f(D['r_mean'])}", label="depth agreement Mooney vs. original (face region)"),
@@ -167,7 +172,7 @@ def main():
         keys = [("says_face", "Face"), ("gender_acc", "Gender"), ("age_acc", "Age"),
                 ("light_acc", "Light dir."), ("orientation_acc", "Head pose")]
         deck["results"].append(dict(
-            system="Qwen3-VL-8B", title="VLM: the face disappears in the Mooney image",
+            system="Qwen3-VL-8B", title="VLM: a flat silhouette instead of a lit face",
             panel=str(A / "vlm_examples.png"), panel_caption="Unprimed descriptions (first two sentences) of two originals and their Mooney images.",
             stats=[dict(big=p(vo.get("says_face")), label="'contains a face' for originals"),
                    dict(big=p(vm.get("says_face")), label="'contains a face' for Mooneys", color="moon")],
@@ -206,7 +211,7 @@ def main():
         mo_face = V.get("mooney_says_face_by_light", {})
         mo_mention = V.get("mooney_mentions_face_by_light", {})
         deck["light_slide"] = dict(
-            title="Light from below: no face for humans or machines",
+            title="Light from below: the hardest case for humans and machines",
             chart=dict(title="Mooney images: evidence for a face, by light direction", labels=["above", "left", "right", "below"],
                        fmt="0%", max=1, series=[
                            dict(name="Human: 'probably/clearly a face' (rating ≥ 4)",
@@ -254,7 +259,7 @@ def main():
             dict(head="My own work and decisions", lines=[
                 "Chose the idea and the four vision systems from the proposed options and revised the plan with my comments "
                 "(e.g. focus on light from above, landmark-based light check, 1–5 ratings)",
-                "Blind face ratings of all Mooney images (two rounds) and the manual top-10 selection",
+                "Blind face ratings of all Mooney images (three rounds) and the manual top-10 selection",
                 "Reviewed the results and the slides; I am responsible for this submission"]),
         ],
         ai_note=("The 100 original images are AI-generated on purpose (Z-Image-Turbo, Apache-2.0) to control the lighting and to "
