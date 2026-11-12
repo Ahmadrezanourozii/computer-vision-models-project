@@ -284,6 +284,79 @@ def main():
             "Code: github.com/Ahmadrezanourozii/computer-vision-models-project",
         ],
     )
+    # ---- short on-slide texts (the long versions go to the speaker notes)
+    fs = Hh0.get("face_share_by_light", {}) if Hh0 else {}
+    vb = V.get("mooney_says_face_by_light", {})
+    fb = F.get("rank1_oracle_by_light", {})
+    mo = M.get("by_light_shadow_orig", {})
+    ca = (Hh0.get("corr_with_human", {}) if Hh0 else {}).get("ArcFace similarity to original", {})
+    _lc = [meta.loc[k, "light"] for k in sel]
+    short = {
+        "Depth Anything V2": dict(
+            title="Depth Anything V2: only a coarse head shape",
+            facts=[f"Depth agreement with the original: r = {f(D['r_mean'])}",
+                   f"Depth follows the white pattern: partial r = {f(D['partial_pattern'])}"],
+            takeaway="A coarse head shape survives, the facial relief is lost."),
+        "Qwen3-VL-8B": dict(
+            title="Qwen3-VL: a flat silhouette, not a lit face",
+            facts=[f"'Contains a face': {p(vo.get('says_face'))} → {p(vm.get('says_face'))}",
+                   f"Gender / age correct on Mooneys: {p(vm.get('gender_acc'))} / {p(vm.get('age_acc'))}",
+                   f"'Black regions are shadows': {p(vo.get('black_is_shadow'))} → {p(vm.get('black_is_shadow'))}"],
+            takeaway="The model names a face, but describes a flat shape without light or shadow."),
+        "InsightFace": dict(
+            title="InsightFace: no Mooney face is detected",
+            facts=[f"Faces detected: {p(F['det_rate_orig'])} → {p(F['det_rate_mooney'])}",
+                   f"Identification with given alignment: {p(F['rank1_oracle'])} (chance 1%)"],
+            takeaway="Some identity information is left in the Mooney, but the detector never finds the face."),
+        "Marigold": dict(
+            title="Marigold: black regions are read as paint",
+            facts=[f"Contrast explained as shading: {M['shadow_index_orig']:.2f} → {M['shadow_index_mooney']:.2f}",
+                   f"Normal error on Mooneys: {M['normal_err']:.0f}°"],
+            takeaway="Inverse rendering puts the black regions into the albedo. Humans see them as shadows."),
+    }
+    for r in deck["results"]:
+        r["note"] = r["takeaway"]
+        r.update(short[r["system"]])
+    deck["top10_note"] = ("Selected by hand after a blind 1–5 rating of all 100 Mooney images. Light direction: "
+                          + ", ".join(f"{_lc.count(l)} {l}" for l in ["right", "left", "top", "bottom"] if _lc.count(l)) + ".")
+    deck["approach_cols"] = [
+        dict(head="Images", lines=["100 synthetic portraits (Z-Image-Turbo), no real persons",
+                                   "One hard light from the left, right, top or bottom, 25 each",
+                                   "Balanced in gender, age and ethnic background"]),
+        dict(head="Mooney tool", lines=["Grayscale → Gaussian blur → threshold at a fixed share of white pixels",
+                                        f"Same setting for all images: blur σ = {blur:g} % of the image side, {white:g} % white",
+                                        "GUI and batch command line"]),
+        dict(head="Evaluation", lines=["Four vision systems on the originals and on the Mooney images",
+                                       "Compared with the design ground truth and with the output for the original",
+                                       "Blind human rating (1–5) of every Mooney image as a reference"]),
+    ]
+    deck["approach_title"] = "Approach"
+    deck["approach_note"] = deck["approach_question"]
+    deck["approach_question"] = ("Do vision systems see a face under extreme light in a Mooney image, or only a black-and-white pattern? "
+                                 "Is light from below harder for them, as it is for humans?")
+    deck["systems_note"] = "All models are pretrained and used without fine-tuning. Originals and Mooney images get the same input protocol."
+    if deck.get("light_slide"):
+        L = deck["light_slide"]
+        L["note"] = " ".join(L["points"]) + " " + L["takeaway"]
+        L["title"] = "Light from below is the hardest condition"
+        L["chart"]["series"] = L["chart"]["series"][:2]
+        L["chart"]["series"][0]["name"] = "Human: rating ≥ 4"
+        L["points"] = [f"Human, rating ≥ 4: right {p(fs.get('right'))}, left {p(fs.get('left'))}, top {p(fs.get('top'))}, bottom {p(fs.get('bottom'))}",
+                       f"Qwen3-VL and ArcFace are also weakest for bottom light ({p(vb.get('bottom'))} and {p(fb.get('bottom'))})",
+                       f"Marigold explains bottom-lit originals less as shading ({mo.get('bottom', 0):.2f} vs. about {mo.get('top', 0):.2f})"]
+        L["takeaway"] = "Bottom light is worst for the human and for the machines. Top light is not the best case at 10 % white."
+    if deck.get("summary"):
+        Sm = deck["summary"]
+        Sm["note"] = Sm["takeaway"]
+        Sm["title"] = "Summary"
+        Sm["points"] = ["Face detection fails on every Mooney image",
+                        f"The VLM names a face in {p(vm.get('says_face'))}, but never a shadow",
+                        "Depth and inverse rendering keep a coarse shape and read black as paint",
+                        f"Only ArcFace similarity follows the human ratings (ρ = {ca.get('rho', 0):.2f})"]
+        Sm["takeaway"] = ("The systems find a face-like pattern, not a 3D face under extreme light. This agrees with Paper 1.")
+    deck["tool_text"] = "Left: GUI with sliders for blur strength and % white pixels. Right: batch run on the command line and the GUI batch tab."
+    deck["code_text"] = ("1. Luminance (grayscale)\n2. Gaussian blur, σ in % of the image side\n"
+                         "3. Threshold at the percentile that leaves w % of the pixels white")
     paths = [x for r in deck["results"] for x in [r["panel"]]] + [deck["shot_gui"], deck["shot_cli"], deck["shot_code"],
                                                                      deck["shot_batch"]]
     deck["sizes"] = {q: Image.open(q).size for q in paths if Path(q).exists()}

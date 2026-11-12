@@ -1,5 +1,6 @@
 // Builds the Part-1 presentation from work/deck_input.json (written by slides/prepare_deck.py).
 //   NODE_PATH=$(npm root -g) node slides/build_deck.js work/deck_input.json out.pptx
+// Plain academic layout: white slides, one sans-serif family, short text, long explanations in the notes.
 const fs = require("fs");
 const path = require("path");
 const pptxgen = require("pptxgenjs");
@@ -9,288 +10,229 @@ const OUT = process.argv[3] || "deck.pptx";
 const SKILL = process.env.PPTX_SKILL || "";
 
 const THEME = {
-  name: "Mooney",
-  headFontFace: "Cambria",
-  bodyFontFace: "Calibri",
+  name: "CompVP",
+  headFontFace: "Arial",
+  bodyFontFace: "Arial",
   colors: {
-    dk1: "111315", lt1: "FFFFFF", dk2: "2B2F33", lt2: "F1F3F5",
-    accent1: "F2A93B", accent2: "4A5560", accent3: "2F7F8A", accent4: "C0392B",
-    accent5: "8E9AA3", accent6: "1F4E5F", hlink: "2F7F8A", folHlink: "4A5560",
+    dk1: "1A1A1A", lt1: "FFFFFF", dk2: "04316A", lt2: "F2F4F7",
+    accent1: "04316A", accent2: "8C9FB1", accent3: "C8102E", accent4: "5B6770",
+    accent5: "7A8590", accent6: "2F6DB5", hlink: "04316A", folHlink: "5B6770",
   },
 };
 const HEX = THEME.colors;
-const ORIG = HEX.accent2, MOON = HEX.accent1;      // chart convention: Original = slate, Mooney = amber
+const BLUE = HEX.dk2, GREY = HEX.accent2, MUTED = HEX.accent5;
+const ORIG = GREY, MOON = BLUE;                     // chart convention: Original = grey, Mooney = blue
 
 const pres = new pptxgen();
 pres.layout = "LAYOUT_WIDE";                        // 13.333 x 7.5 in
 pres.author = "Ahmadreza Nourozi";
-pres.title = "Do Vision Models See Mooney Faces? - CompVP Project Part 1";
+pres.title = "Do Modern Vision Systems Perceive Faces in Mooney Images? - CompVP Project Part 1";
 pres.theme = { headFontFace: THEME.headFontFace, bodyFontFace: THEME.bodyFontFace };
-const C = pres.SchemeColor;
-const W = 13.333, H = 7.5, MX = 0.6;
+const W = 13.333, H = 7.5, MX = 0.7, TOP = 1.55, BOT = 6.75;
+const FOOT = "Ahmadreza Nourozi  |  Computational Visual Perception, Project Part 1  |  FAU Erlangen-Nürnberg";
 
-// ---------------------------------------------------------------- layouts
+pres.defineSlideMaster({
+  title: "TITLE",
+  background: { color: HEX.lt1 },
+});
 pres.defineSlideMaster({
   title: "CONTENT",
   background: { color: HEX.lt1 },
   objects: [
-    { placeholder: { options: { name: "title", type: "title", x: MX, y: 0.5, w: W - 2 * MX, h: 0.75, fontFace: THEME.headFontFace,
-        fontSize: 28, bold: true, color: HEX.dk1, valign: "top", align: "left", margin: 0 }, text: "" } },
-    { text: { text: "A. Nourozi  ·  CompVP Project Part 1", options: { x: MX, y: H - 0.42, w: 6, h: 0.3, fontSize: 10,
-        color: HEX.accent5, fontFace: THEME.bodyFontFace, margin: 0 } } },
+    { placeholder: { options: { name: "title", type: "title", x: MX, y: 0.45, w: W - 2 * MX, h: 0.8, fontSize: 30, bold: true,
+        color: BLUE, valign: "middle", align: "left", margin: 0 }, text: "" } },
+    { text: { text: FOOT, options: { x: MX, y: H - 0.45, w: 10, h: 0.3, fontSize: 10, color: MUTED, margin: 0 } } },
   ],
-  slideNumber: { x: W - MX - 0.6, y: H - 0.42, w: 0.6, h: 0.3, fontSize: 10, color: HEX.accent5, align: "right" },
-});
-pres.defineSlideMaster({
-  title: "DARK",
-  background: { color: HEX.dk1 },
-  objects: [
-    { placeholder: { options: { name: "title", type: "title", x: MX, y: 0.5, w: W - 2 * MX, h: 0.75, fontFace: THEME.headFontFace,
-        fontSize: 28, bold: true, color: HEX.lt1, valign: "top", align: "left", margin: 0 }, text: "" } },
-  ],
-  slideNumber: { x: W - MX - 0.6, y: H - 0.42, w: 0.6, h: 0.3, fontSize: 10, color: HEX.accent5, align: "right" },
+  slideNumber: { x: W - MX - 0.6, y: H - 0.45, w: 0.6, h: 0.3, fontSize: 10, color: MUTED, align: "right" },
 });
 
 // ---------------------------------------------------------------- helpers
-function tag(slide, text, dark = false) {
-  slide.addText(text.toUpperCase(), { x: MX, y: 0.2, w: 8, h: 0.28, fontSize: 11, bold: true, charSpacing: 3,
-    color: dark ? HEX.accent1 : "B9781A", margin: 0, isTextBox: true, objectName: "section tag" });
-}
-function card(slide, x, y, w, h, fill = HEX.lt2) {
-  slide.addShape(pres.shapes.ROUNDED_RECTANGLE, { x, y, w, h, rectRadius: 0.12, fill: { color: fill }, line: { color: fill },
-    objectName: "card" });
-}
-function stat(slide, x, y, w, big, label, color = HEX.dk1, sub = null) {
-  slide.addText(big, { x, y, w, h: 0.75, fontSize: 40, bold: true, color, fontFace: THEME.headFontFace, margin: 0,
-    isTextBox: true });
-  slide.addText(label, { x, y: y + 0.75, w, h: 0.5, fontSize: 13, color: HEX.dk2, margin: 0, valign: "top", isTextBox: true });
-  if (sub) slide.addText(sub, { x, y: y + 1.2, w, h: 0.35, fontSize: 11, color: HEX.accent5, margin: 0, isTextBox: true });
-}
-function pct(v) { return (v === null || v === undefined || Number.isNaN(v)) ? "–" : `${Math.round(100 * v)}%`; }
-function num(v, d = 2) { return (v === null || v === undefined || Number.isNaN(v)) ? "–" : Number(v).toFixed(d); }
 function img(slide, p, o) { if (p && fs.existsSync(p)) slide.addImage({ path: p, ...o }); }
-function imgFit(slide, p, x, y, w, h, extra = {}) {   // keep aspect ratio inside box (x,y,w,h), centred
-  if (!p || !fs.existsSync(p)) return;
+function imgFit(slide, p, x, y, w, h, extra = {}) {   // keep aspect ratio inside box, top-left aligned
+  if (!p || !fs.existsSync(p)) return { w: 0, h: 0 };
   const sz = IN.sizes && IN.sizes[p];
   let ww = w, hh = h;
   if (sz) { const r = sz[0] / sz[1]; if (w / h > r) { ww = h * r; } else { hh = w / r; } }
-  slide.addImage({ path: p, x: x + (w - ww) / 2, y: y + (h - hh) / 2, w: ww, h: hh, ...extra });
+  slide.addImage({ path: p, x, y, w: ww, h: hh, ...extra });
+  return { w: ww, h: hh };
 }
+function bullets(slide, lines, o) {
+  slide.addText(lines.map((t, k) => ({ text: t, options: { bullet: { indent: 18 }, breakLine: k < lines.length - 1 } })),
+    Object.assign({ fontSize: 18, color: HEX.dk1, valign: "top", paraSpaceAfter: 10, margin: 0, isTextBox: true }, o));
+}
+function conclusion(slide, text, y = 6.05) {
+  slide.addText(text, { x: MX, y, w: W - 2 * MX, h: 0.6, fontSize: 18, bold: true, color: BLUE, margin: 0, valign: "middle",
+    isTextBox: true });
+}
+function caption(slide, text, x, y, w) {
+  slide.addText(text, { x, y, w, h: 0.3, fontSize: 12, color: MUTED, margin: 0, valign: "top", isTextBox: true });
+}
+const COLORS = { orig: ORIG, moon: MOON, dark: HEX.accent4, teal: HEX.accent6, grey: "C5CCD3", red: HEX.accent3 };
+function colorize(spec) { if (spec && spec.series) spec.series.forEach(x => { x.color = COLORS[x.color] || x.color || ORIG; }); return spec; }
 function barChart(slide, spec, o) {
-  // spec: {labels, series:[{name, values, color}], fmt, max, title}  (legacy: orig/moon arrays)
-  const series = spec.series || [{ name: "Original", values: spec.orig, color: ORIG }, { name: "Mooney", values: spec.moon, color: MOON }];
+  const series = spec.series;
   const data = series.map(x => ({ name: x.name, labels: spec.labels, values: x.values }));
   const fmt = spec.fmt || "0%";
   slide.addChart(pres.charts.BAR, data, Object.assign({
     barDir: "col", barGrouping: "clustered", chartColors: series.map(x => x.color || ORIG), showLegend: series.length > 1,
-    legendPos: spec.legend || "t", legendFontSize: 11, legendFontFace: "+mn-lt", showValue: true, dataLabelPosition: "outEnd",
-    dataLabelFontSize: 10, dataLabelFontFace: "+mn-lt", dataLabelColor: HEX.dk2, dataLabelFormatCode: fmt,
-    valAxisMinVal: spec.min ?? 0, valAxisMaxVal: spec.max || 1, valAxisLabelFormatCode: fmt, valAxisLabelFontSize: 10,
-    catAxisLabelFontSize: 11, valAxisLabelFontFace: "+mn-lt", catAxisLabelFontFace: "+mn-lt", catAxisLabelColor: HEX.dk2,
-    valAxisLabelColor: HEX.accent5, valGridLine: { color: "E3E6E8", size: 0.75 }, catGridLine: { style: "none" },
-    barGapWidthPct: 60, showTitle: !!spec.title, title: spec.title || "", titleFontSize: 12, titleColor: HEX.dk2,
-    titleFontFace: "+mn-lt",
+    legendPos: "b", legendFontSize: 12, legendFontFace: "+mn-lt", legendColor: HEX.dk1, showValue: true,
+    dataLabelPosition: "outEnd", dataLabelFontSize: 11, dataLabelFontFace: "+mn-lt", dataLabelColor: HEX.dk1,
+    dataLabelFormatCode: fmt, valAxisMinVal: spec.min ?? 0, valAxisMaxVal: spec.max || 1, valAxisLabelFormatCode: fmt,
+    valAxisLabelFontSize: 11, catAxisLabelFontSize: 12, valAxisLabelFontFace: "+mn-lt", catAxisLabelFontFace: "+mn-lt",
+    catAxisLabelColor: HEX.dk1, valAxisLabelColor: HEX.dk1, valGridLine: { color: "E1E5EA", size: 0.75 },
+    catGridLine: { style: "none" }, barGapWidthPct: 70, showTitle: !!spec.title, title: spec.title || "", titleFontSize: 13,
+    titleColor: HEX.dk1, titleFontFace: "+mn-lt",
   }, o));
 }
-const COLORS = { orig: ORIG, moon: MOON, dark: HEX.dk2, teal: HEX.accent3, grey: HEX.accent5, red: HEX.accent4 };
-function colorize(spec) { if (spec && spec.series) spec.series.forEach(x => { x.color = COLORS[x.color] || x.color || ORIG; }); return spec; }
 
 // ---------------------------------------------------------------- 1 title
 {
-  const s = pres.addSlide({ masterName: "DARK" });
-  // right: Mooney mosaic
-  const tiles = IN.title_tiles || [];
-  const ts = 1.62, g = 0.08, x0 = W - MX - 3 * ts - 2 * g, y0 = 1.0;
-  tiles.slice(0, 9).forEach((p, i) => img(s, p, { x: x0 + (i % 3) * (ts + g), y: y0 + Math.floor(i / 3) * (ts + g), w: ts, h: ts,
-    rounding: false }));
-  s.addText("COMPUTATIONAL VISUAL PERCEPTION  ·  PROJECT PART 1", { x: MX, y: 1.0, w: 6.9, h: 0.3, fontSize: 12, bold: true,
-    charSpacing: 3, color: HEX.accent1, margin: 0, isTextBox: true });
-  s.addText(IN.title || "Do Modern Vision Systems Perceive Faces in Mooney Images?", { x: MX, y: 1.45, w: 6.9, h: 1.95, fontSize: 36, bold: true,
-    fontFace: THEME.headFontFace, color: HEX.lt1, margin: 0, valign: "top", isTextBox: true });
-  s.addText(IN.subtitle || "", { x: MX, y: 3.5, w: 6.6, h: 0.9, fontSize: 16, color: "C9CED3", margin: 0, valign: "top",
+  const s = pres.addSlide({ masterName: "TITLE" });
+  s.addText("Computational Visual Perception  |  Project Part 1", { x: MX, y: 1.0, w: 7.2, h: 0.4, fontSize: 16, color: MUTED,
+    margin: 0, isTextBox: true });
+  s.addText(IN.title, { x: MX, y: 1.6, w: 7.2, h: 2.2, fontSize: 36, bold: true, color: BLUE, margin: 0, valign: "top",
     isTextBox: true });
   s.addText([
-    { text: "Ahmadreza Nourozi", options: { fontSize: 22, bold: true, color: HEX.lt1, breakLine: true } },
-    { text: "M.Sc. Artificial Intelligence  ·  Student no. 23726011", options: { fontSize: 14, color: "C9CED3", breakLine: true } },
-    { text: "FAU Erlangen-Nürnberg  ·  " + (IN.date || "November 2026"), options: { fontSize: 14, color: "C9CED3" } },
-  ], { x: MX, y: 4.75, w: 6.6, h: 1.2, margin: 0, valign: "top", isTextBox: true, paraSpaceAfter: 4 });
-  s.addText("Team: Ahmadreza Nourozi (single-person team)", { x: MX, y: 6.55, w: 6.6, h: 0.3, fontSize: 11,
-    color: HEX.accent5, margin: 0, isTextBox: true });
+    { text: "Ahmadreza Nourozi", options: { fontSize: 22, bold: true, color: HEX.dk1, breakLine: true } },
+    { text: "Student number 23726011  |  M.Sc. Artificial Intelligence", options: { fontSize: 16, color: HEX.dk1, breakLine: true } },
+    { text: "Friedrich-Alexander-Universität Erlangen-Nürnberg", options: { fontSize: 16, color: HEX.dk1, breakLine: true } },
+    { text: IN.date || "November 2026", options: { fontSize: 16, color: MUTED } },
+  ], { x: MX, y: 4.3, w: 7.2, h: 1.9, margin: 0, valign: "top", isTextBox: true, paraSpaceAfter: 6 });
+  const t = (IN.top10 || []).slice(0, 2), ts = 2.3, g = 0.12, x0 = W - MX - 2 * ts - g, y0 = 1.35;
+  t.forEach((q, i) => {
+    img(s, q.orig, { x: x0, y: y0 + i * (ts + g), w: ts, h: ts });
+    img(s, q.mooney, { x: x0 + ts + g, y: y0 + i * (ts + g), w: ts, h: ts });
+  });
+  caption(s, "Original and Mooney image", x0, y0 + 2 * ts + g + 0.08, 2 * ts + g);
 }
 
 // ---------------------------------------------------------------- 2 approach (one page)
 {
   const s = pres.addSlide({ masterName: "CONTENT" });
-  tag(s, "Approach and ideas");
   s.addText(IN.approach_title, { placeholder: "title" });
-  const cols = IN.approach_cols;               // [{head, lines:[...]}, x3]
-  const cw = (W - 2 * MX - 2 * 0.3) / 3, cy = 1.45, ch = 4.5;
+  const cols = IN.approach_cols, gap = 0.5, cw = (W - 2 * MX - 2 * gap) / 3;
   cols.forEach((c, i) => {
-    const x = MX + i * (cw + 0.3);
-    card(s, x, cy, cw, ch);
-    s.addShape(pres.shapes.OVAL, { x: x + 0.25, y: cy + 0.25, w: 0.5, h: 0.5, fill: { color: i === 1 ? HEX.dk1 : HEX.accent1 },
-      line: { color: i === 1 ? HEX.dk1 : HEX.accent1 } });
-    s.addText(String(i + 1), { x: x + 0.25, y: cy + 0.25, w: 0.5, h: 0.5, align: "center", valign: "middle", fontSize: 16,
-      bold: true, color: i === 1 ? HEX.lt1 : HEX.dk1, margin: 0, isTextBox: true });
-    s.addText(c.head, { x: x + 0.9, y: cy + 0.25, w: cw - 1.1, h: 0.5, fontSize: 18, bold: true, valign: "middle",
-      fontFace: THEME.headFontFace, color: HEX.dk1, margin: 0, isTextBox: true });
-    s.addText(c.lines.map((t, k) => ({ text: t, options: { bullet: true, breakLine: k < c.lines.length - 1 } })),
-      { x: x + 0.25, y: cy + 0.95, w: cw - 0.45, h: ch - 1.15, fontSize: 13, color: HEX.dk2, valign: "top",
-        paraSpaceAfter: 6, margin: 0, isTextBox: true });
+    const x = MX + i * (cw + gap);
+    s.addText(c.head, { x, y: TOP, w: cw, h: 0.45, fontSize: 20, bold: true, color: HEX.dk1, margin: 0, isTextBox: true });
+    bullets(s, c.lines, { x, y: TOP + 0.65, w: cw, h: 3.2, fontSize: 17 });
   });
-  card(s, MX, 6.15, W - 2 * MX, 0.78, "FFF4E2");
-  s.addText(IN.approach_question, { x: MX + 0.25, y: 6.15, w: W - 2 * MX - 0.5, h: 0.78, fontSize: 13, color: HEX.dk1,
-    margin: 0, valign: "middle", isTextBox: true });
+  s.addText([{ text: "Question. ", options: { bold: true, color: BLUE } }, { text: IN.approach_question, options: { color: HEX.dk1 } }],
+    { x: MX, y: 5.5, w: W - 2 * MX, h: 0.95, fontSize: 18, margin: 0, valign: "top", isTextBox: true });
+  if (IN.approach_note) s.addNotes(IN.approach_note);
 }
 
 // ---------------------------------------------------------------- 3 selected 10 + 10
 {
   const s = pres.addSlide({ masterName: "CONTENT" });
-  tag(s, "Subset: manually selected top 10");
-  s.addText("10 selected originals and their Mooney images", { placeholder: "title" });
-  const n = 10, gap = 0.08, ts = (W - 2 * MX - (n - 1) * gap) / n;
-  const y1 = 1.55, y2 = y1 + ts + 0.12;
+  s.addText("Ten selected originals and their Mooney images", { placeholder: "title" });
+  const n = 5, gap = 0.1, pair = 0.04, ts = 1.06, bw = 2 * ts + pair, x0 = MX + (W - 2 * MX - n * bw - (n - 1) * 0.28) / 2;
   (IN.top10 || []).forEach((t, i) => {
-    const x = MX + i * (ts + gap);
-    img(s, t.orig, { x, y: y1, w: ts, h: ts });
-    img(s, t.mooney, { x, y: y2, w: ts, h: ts });
-    s.addText(t.label, { x, y: y2 + ts + 0.05, w: ts, h: 0.3, fontSize: 10, color: HEX.accent5, align: "center", margin: 0,
-      isTextBox: true });
+    const r = Math.floor(i / n), c = i % n, x = x0 + c * (bw + 0.28), y = TOP + 0.05 + r * (ts + 0.55);
+    img(s, t.orig, { x, y, w: ts, h: ts });
+    img(s, t.mooney, { x: x + ts + pair, y, w: ts, h: ts });
+    s.addText(t.label.replace("·", "|"), { x, y: y + ts + 0.04, w: bw, h: 0.26, fontSize: 11, color: MUTED, align: "center",
+      margin: 0, isTextBox: true });
   });
-  s.addText("Original", { x: MX - 0.02, y: y1 - 0.02, w: 1, h: 0.25, fontSize: 9, bold: true, color: HEX.lt1, margin: 0.03,
-    fill: { color: HEX.dk2 }, isTextBox: true });
-  s.addText("Mooney", { x: MX - 0.02, y: y2 - 0.02, w: 1, h: 0.25, fontSize: 9, bold: true, color: HEX.dk1, margin: 0.03,
-    fill: { color: HEX.accent1 }, isTextBox: true });
-  if (IN.top10_note) s.addText(IN.top10_note, { x: MX, y: y2 + ts + 0.45, w: W - 2 * MX, h: 0.55, fontSize: 12.5, italic: true,
-    color: HEX.dk2, margin: 0, valign: "top", isTextBox: true });
-  const tc = IN.top10_criteria || [];
-  const cw = (W - 2 * MX - (tc.length - 1) * 0.3) / Math.max(1, tc.length);
-  tc.forEach((c, i) => {
-    const x = MX + i * (cw + 0.3);
-    card(s, x, 5.35, cw, 1.35);
-    s.addText(c.head, { x: x + 0.25, y: 5.45, w: cw - 0.5, h: 0.4, fontSize: 14, bold: true, color: HEX.dk1,
-      fontFace: THEME.headFontFace, margin: 0, isTextBox: true });
-    s.addText(c.text, { x: x + 0.25, y: 5.85, w: cw - 0.5, h: 0.8, fontSize: 12, color: HEX.dk2, margin: 0, valign: "top",
-      isTextBox: true });
-  });
+  s.addText(IN.top10_note, { x: MX, y: 5.35, w: W - 2 * MX, h: 0.7, fontSize: 18, color: HEX.dk1, margin: 0, valign: "top",
+    isTextBox: true });
 }
 
 // ---------------------------------------------------------------- 4 declaration of vision systems
 {
   const s = pres.addSlide({ masterName: "CONTENT" });
-  tag(s, "Declaration of used vision systems");
-  s.addText("Four vision systems, one input protocol", { placeholder: "title" });
-  const hdr = ["", "System", "Model / checkpoint", "Output we analyse", "Source · licence"].map(t => ({ text: t,
-    options: { bold: true, color: HEX.lt1, fill: { color: HEX.dk2 }, fontSize: 12 } }));
+  s.addText("Vision systems used", { placeholder: "title" });
+  const hdr = ["", "System", "Model", "Output analysed"].map(t => ({ text: t,
+    options: { bold: true, color: HEX.dk1, fontSize: 15, border: [{ type: "none" }, { type: "none" }, { type: "solid", pt: 1.25, color: HEX.dk1 }, { type: "none" }] } }));
+  const line = [{ type: "none" }, { type: "none" }, { type: "solid", pt: 0.5, color: "C5CCD3" }, { type: "none" }];
   const rows = [hdr].concat(IN.systems.map((r, i) => [
-    { text: `R${i + 1}`, options: { bold: true, color: HEX.dk1, fill: { color: HEX.accent1 }, align: "center" } },
-    { text: r.system, options: { bold: true } }, { text: r.model }, { text: r.output }, { text: r.source, options: { fontSize: 10.5 } },
+    { text: `${i + 1}`, options: { border: line } }, { text: r.system, options: { bold: true, border: line } },
+    { text: r.model.replace(/\s*\([^)]*\/[^)]*\)/, ""), options: { border: line } }, { text: r.output, options: { border: line } },
   ]));
-  s.addTable(rows, { x: MX, y: 1.5, w: W - 2 * MX, colW: [0.55, 2.1, 3.25, 3.75, 2.48], fontSize: 11.5, color: HEX.dk2,
-    border: { type: "solid", pt: 0.75, color: "D5D9DD" }, valign: "middle", margin: [0.06, 0.08, 0.06, 0.08],
-    rowH: [0.42, 0.95, 0.95, 0.95, 0.95] });
-  s.addText(IN.systems_note, { x: MX, y: 6.0, w: W - 2 * MX, h: 0.75, fontSize: 12, color: HEX.dk2, margin: 0,
-    valign: "top", isTextBox: true });
+  s.addTable(rows, { x: MX, y: TOP, w: W - 2 * MX, colW: [0.5, 3.2, 4.1, 4.133], fontSize: 15, color: HEX.dk1,
+    valign: "middle", margin: [0.06, 0.08, 0.06, 0.08], rowH: [0.5, 0.82, 0.82, 0.82, 0.82] });
+  s.addText(IN.systems_note, { x: MX, y: 5.75, w: W - 2 * MX, h: 0.7, fontSize: 16, color: HEX.dk1, margin: 0, valign: "top",
+    isTextBox: true });
 }
 
 // ---------------------------------------------------------------- 5-8 results per system
-function resultSlide(r, idx) {
+function resultSlide(r) {
   const s = pres.addSlide({ masterName: "CONTENT" });
-  tag(s, `Results · system ${idx} · ${r.system}`);
   s.addText(r.title, { placeholder: "title" });
-  const lx = MX, ly = 1.45, lw = 7.6, lh = 4.15;
-  imgFit(s, r.panel, lx, ly, lw, lh);
-  if (r.panel_caption) s.addText(r.panel_caption, { x: lx, y: ly + lh + 0.05, w: lw, h: 0.3, fontSize: 10.5, color: HEX.accent5,
-    margin: 0, isTextBox: true });
-  // right column: stats + chart
-  const rx = MX + lw + 0.35, rw = W - MX - rx;
-  (r.stats || []).forEach((st, i) => stat(s, rx + i * (rw / r.stats.length), 1.45, rw / r.stats.length - 0.15, st.big, st.label,
-    st.color === "moon" ? "B9781A" : HEX.dk1));
-  if (r.chart) barChart(s, colorize(r.chart), { x: rx - 0.1, y: 2.85, w: rw + 0.1, h: 2.95 });
-  card(s, MX, 6.0, W - 2 * MX, 0.82, "FFF4E2");
-  s.addText(r.takeaway, { x: MX + 0.25, y: 6.0, w: W - 2 * MX - 0.5, h: 0.82, fontSize: 13.5, color: HEX.dk1, margin: 0,
-    valign: "middle", isTextBox: true });
-  return s;
+  const lw = 7.0, lh = 4.0;
+  const d = imgFit(s, r.panel, MX, TOP, lw, lh);
+  if (r.panel_caption) caption(s, r.panel_caption, MX, TOP + d.h + 0.08, lw);
+  const rx = MX + lw + 0.45, rw = W - MX - rx, fh = 0.45 * (r.facts || []).length + 0.1;
+  bullets(s, r.facts || [], { x: rx, y: TOP, w: rw, h: fh, fontSize: 16, paraSpaceAfter: 6 });
+  if (r.chart) barChart(s, colorize(r.chart), { x: rx - 0.1, y: TOP + fh + 0.1, w: rw + 0.1, h: 5.8 - TOP - fh });
+  conclusion(s, r.takeaway);
+  if (r.note) s.addNotes(r.note);
 }
-(IN.results || []).forEach((r, i) => resultSlide(r, i + 1));
+(IN.results || []).forEach(resultSlide);
 
-// ---------------------------------------------------------------- light-from-above slide (hypothesis H2)
+// ---------------------------------------------------------------- light direction (hypothesis H2)
 if (IN.light_slide) {
   const L = IN.light_slide;
   const s = pres.addSlide({ masterName: "CONTENT" });
-  tag(s, "Results · light from above vs. below (H2)");
   s.addText(L.title, { placeholder: "title" });
-  barChart(s, colorize(L.chart), { x: MX - 0.1, y: 1.4, w: 8.3, h: 4.45, showValue: false });
-  card(s, MX + 8.45, 1.45, W - 2 * MX - 8.45, 4.4);
-  s.addText(L.points.map((t, k) => ({ text: t, options: { bullet: true, breakLine: k < L.points.length - 1 } })),
-    { x: MX + 8.65, y: 1.6, w: W - 2 * MX - 8.85, h: 4.1, fontSize: 12.5, color: HEX.dk2, valign: "top", paraSpaceAfter: 6,
-      margin: 0, isTextBox: true });
-  card(s, MX, 6.0, W - 2 * MX, 0.82, "FFF4E2");
-  s.addText(L.takeaway, { x: MX + 0.25, y: 6.0, w: W - 2 * MX - 0.5, h: 0.82, fontSize: 13.5, color: HEX.dk1, margin: 0,
-    valign: "middle", isTextBox: true });
+  barChart(s, colorize(L.chart), { x: MX - 0.1, y: TOP - 0.05, w: 6.9, h: 4.3 });
+  bullets(s, L.points, { x: MX + 7.3, y: TOP + 0.2, w: W - 2 * MX - 7.3, h: 3.9, fontSize: 17 });
+  conclusion(s, L.takeaway);
+  if (L.note) s.addNotes(L.note);
 }
 
-// ---------------------------------------------------------------- 9 summary across systems
+// ---------------------------------------------------------------- summary across systems
 if (IN.summary) {
+  const Sm = IN.summary;
   const s = pres.addSlide({ masterName: "CONTENT" });
-  tag(s, "Results · all systems");
-  s.addText(IN.summary.title, { placeholder: "title" });
-  barChart(s, colorize(IN.summary.main), { x: MX - 0.1, y: 1.4, w: 7.4, h: 4.5 });
-  if (IN.summary.by_light) barChart(s, colorize(IN.summary.by_light), { x: 7.75, y: 1.4, w: W - MX - 7.75, h: 4.5,
-    showValue: !!IN.summary.by_light.show_values });
-  card(s, MX, 6.0, W - 2 * MX, 0.82, "FFF4E2");
-  s.addText(IN.summary.takeaway, { x: MX + 0.25, y: 6.0, w: W - 2 * MX - 0.5, h: 0.82, fontSize: 13.5, color: HEX.dk1,
-    margin: 0, valign: "middle", isTextBox: true });
+  s.addText(Sm.title, { placeholder: "title" });
+  barChart(s, colorize(Sm.main), { x: MX - 0.1, y: TOP - 0.05, w: 6.9, h: 4.3 });
+  bullets(s, Sm.points || [], { x: MX + 7.3, y: TOP + 0.2, w: W - 2 * MX - 7.3, h: 3.9, fontSize: 17 });
+  conclusion(s, Sm.takeaway);
+  if (Sm.note) s.addNotes(Sm.note);
 }
 
-// ---------------------------------------------------------------- 10 tool screenshot
+// ---------------------------------------------------------------- tool screenshot
 {
   const s = pres.addSlide({ masterName: "CONTENT" });
-  tag(s, "Screenshot of the tool");
-  s.addText("The Mooney tool: GUI with live controls + batch CLI", { placeholder: "title" });
-  imgFit(s, IN.shot_gui, MX, 1.4, 7.9, 4.95, { line: { color: "D5D9DD", width: 0.75 } });
-  const rx = MX + 8.15, rw = W - MX - rx;
-  imgFit(s, IN.shot_cli, rx, 1.4, rw, 2.0, { line: { color: "D5D9DD", width: 0.75 } });
-  imgFit(s, IN.shot_batch, rx, 3.55, rw, 2.8, { line: { color: "D5D9DD", width: 0.75 } });
-  s.addText(IN.tool_text, { x: MX, y: 6.45, w: W - 2 * MX, h: 0.45, fontSize: 12, color: HEX.dk2, margin: 0,
-    valign: "top", isTextBox: true });
+  s.addText("Screenshot of the Mooney tool", { placeholder: "title" });
+  const ln = { color: "C5CCD3", width: 0.75 };
+  imgFit(s, IN.shot_gui, MX, TOP, 7.4, 4.6, { line: ln });
+  const rx = MX + 7.65, rw = W - MX - rx;
+  const a = imgFit(s, IN.shot_cli, rx, TOP, rw, 2.0, { line: ln });
+  imgFit(s, IN.shot_batch, rx, TOP + a.h + 0.15, rw, 4.6 - a.h - 0.15, { line: ln });
+  s.addText(IN.tool_text, { x: MX, y: 6.2, w: W - 2 * MX, h: 0.45, fontSize: 14, color: HEX.dk1, margin: 0, valign: "top",
+    isTextBox: true });
 }
 
-// ---------------------------------------------------------------- 11 code screenshot
+// ---------------------------------------------------------------- code screenshot
 {
   const s = pres.addSlide({ masterName: "CONTENT" });
-  tag(s, "Screenshot of the code that generates Mooneys");
-  s.addText(IN.code_title || "The code that generates the Mooney images", { placeholder: "title" });
-  imgFit(s, IN.shot_code, MX, 1.4, 8.6, 5.4);
-  s.addText(IN.code_text, { x: MX + 8.85, y: 1.45, w: W - 2 * MX - 8.85, h: 5.3, fontSize: 12.5, color: HEX.dk2, margin: 0,
-    valign: "top", isTextBox: true, paraSpaceAfter: 6 });
+  s.addText("Screenshot of the code that generates the Mooney images", { placeholder: "title" });
+  imgFit(s, IN.shot_code, MX, TOP, 8.2, 5.0);
+  s.addText(IN.code_text, { x: MX + 8.6, y: TOP, w: W - 2 * MX - 8.6, h: 3.5, fontSize: 17, color: HEX.dk1, margin: 0,
+    valign: "top", isTextBox: true, paraSpaceAfter: 12 });
 }
 
-// ---------------------------------------------------------------- 12 AI usage
+// ---------------------------------------------------------------- AI usage
 {
-  const s = pres.addSlide({ masterName: "DARK" });
-  tag(s, "Declaration of AI usage", true);
-  s.addText("How generative AI was used in this project", { placeholder: "title" });
-  const cw = (W - 2 * MX - 0.3) / 2;
+  const s = pres.addSlide({ masterName: "CONTENT" });
+  s.addText("Declaration of AI usage", { placeholder: "title" });
+  const gap = 0.6, cw = (W - 2 * MX - gap) / 2;
   IN.ai_cols.forEach((c, i) => {
-    const x = MX + i * (cw + 0.3);
-    card(s, x, 1.5, cw, 3.9, "1E2124");
-    s.addText(c.head, { x: x + 0.3, y: 1.7, w: cw - 0.6, h: 0.45, fontSize: 17, bold: true, color: HEX.accent1,
-      fontFace: THEME.headFontFace, margin: 0, isTextBox: true });
-    s.addText(c.lines.map((t, k) => ({ text: t, options: { bullet: true, breakLine: k < c.lines.length - 1 } })),
-      { x: x + 0.3, y: 2.3, w: cw - 0.6, h: 2.95, fontSize: 13.5, color: "E3E6E8", valign: "top", paraSpaceAfter: 8, margin: 0,
-        isTextBox: true });
+    const x = MX + i * (cw + gap);
+    s.addText(c.head, { x, y: TOP, w: cw, h: 0.45, fontSize: 19, bold: true, color: HEX.dk1, margin: 0, isTextBox: true });
+    bullets(s, c.lines, { x, y: TOP + 0.65, w: cw, h: 3.4, fontSize: 15, paraSpaceAfter: 9 });
   });
-  s.addText(IN.ai_note, { x: MX, y: 5.65, w: W - 2 * MX, h: 0.6, fontSize: 12.5, color: "C9CED3", margin: 0, isTextBox: true });
+  s.addText(IN.ai_note, { x: MX, y: 5.75, w: W - 2 * MX, h: 0.7, fontSize: 14, color: HEX.dk1, margin: 0, valign: "top",
+    isTextBox: true });
 }
 
-// ---------------------------------------------------------------- 13 references
+// ---------------------------------------------------------------- references
 if (IN.references) {
   const s = pres.addSlide({ masterName: "CONTENT" });
-  tag(s, "References and reproducibility");
   s.addText("References", { placeholder: "title" });
   s.addText(IN.references.map((t, k) => ({ text: t, options: { breakLine: k < IN.references.length - 1 } })),
-    { x: MX, y: 1.45, w: W - 2 * MX, h: 5.3, fontSize: 12, color: HEX.dk2, valign: "top", paraSpaceAfter: 5, margin: 0,
+    { x: MX, y: TOP, w: W - 2 * MX, h: 5.1, fontSize: 12.5, color: HEX.dk1, valign: "top", paraSpaceAfter: 5, margin: 0,
       isTextBox: true });
 }
 
