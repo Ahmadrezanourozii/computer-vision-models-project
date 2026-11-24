@@ -32,11 +32,11 @@ FOOT = "Ahmadreza Nourozi  |  Computational Visual Perception, Project Part 2  |
 
 # narration: findings only (what we observed), ~140 words for one minute
 SCRIPT = [
-    ("How does a fly's visual system see a Mooney face? We showed our ten faces and their Mooneys, as static "
-     "videos, to the connectome-constrained fly model."),
+    ("How does a fly's visual system see a Mooney face? We showed our ten faces and their Mooney images to the "
+     "connectome-constrained fly model, each as a static video."),
     ("First: to the fly eye, a Mooney is almost the photo. Its seven hundred and twenty-one ommatidia blur the "
      "details, so inputs and responses correlate at about zero point nine."),
-    ("Second: the Mooney's hard black and white drives the network harder, with about one point seven times "
+    ("Second: the hard black and white of the Mooney drives the network harder, with about one point seven times "
      "stronger response patterns."),
     ("Third: after a switch, ON cells like Mi1 and Tm3 depolarize where the image got brighter, OFF cells like "
      "Mi9 and Tm9 where it got darker."),
@@ -125,11 +125,13 @@ def slides(res, out, example):
         vals = np.array([an[t]["r_face"] for t in an if rows[t] == g])
         ax.bar(k, vals.mean(), color=BLUE, width=0.55)
         ax.plot([k, k], [vals.min(), vals.max()], color=INK, lw=2)
-        ax.text(k, vals.mean() + 0.012, f"{vals.mean():.2f}", ha="center", fontsize=18, fontweight="bold", color=BLUE)
+        ax.text(k + 0.3, vals.mean(), f"{vals.mean():.2f}", ha="left", va="center", fontsize=20, fontweight="bold",
+                color=BLUE)
     ax.axhline(summ["r_input_fly_eye"], color=BLUE, ls="--", lw=1.5)
     ax.axhline(summ["r_input_full_resolution"], color=GREY, ls=":", lw=2)
     ax.set_xticks(range(3)); ax.set_xticklabels([r[0] for r in reg], fontsize=17)
     ax.set_ylim(0.6, 1.0); ax.set_ylabel("photo vs. Mooney response similarity (r)", fontsize=17)
+    ax.tick_params(axis="y", labelsize=15); ax.set_xlim(-0.5, 2.9)
     ax.spines[["top", "right"]].set_visible(False)
     ax.set_title("responses after 2 s (steady state); line = range over cell types", fontsize=16, color=GREY)
     paths.append(out / "slide2.png"); fig.savefig(paths[-1]); plt.close(fig)
@@ -191,7 +193,7 @@ def slides(res, out, example):
     t2 = np.arange(1, 2 * C.N_STIM + 1) * C.DT
     t1 = t2[:C.N_STIM]
     types = meta["cell_types"]
-    for k, (t, rect) in enumerate([("Mi1", [0.06, 0.47, 0.4, 0.3]), ("Tm9", [0.06, 0.13, 0.4, 0.3])]):
+    for k, (t, rect) in enumerate([("Mi1", [0.06, 0.45, 0.42, 0.28]), ("Tm9", [0.06, 0.12, 0.42, 0.28])]):
         j = types.index(t)
         ax = fig.add_axes(rect)
         ax.plot(t2, S["rf_central"][j, i], color="#31a354", lw=3, label="photo -> Mooney")
@@ -203,7 +205,8 @@ def slides(res, out, example):
         ax.text(0.02, 0.88, t, transform=ax.transAxes, fontsize=20, fontweight="bold", color=INK)
         ax.tick_params(labelsize=14)
         if k == 0:
-            ax.legend(fontsize=13, frameon=False, ncol=2, loc="lower right")
+            ax.legend(fontsize=14, frameon=False, ncol=4, loc="lower left", bbox_to_anchor=(0.0, 1.02),
+                      handlelength=1.6, columnspacing=1.0)
         else:
             ax.set_xlabel("time (s); switch at 2 s", fontsize=16)
     ax = fig.add_axes([0.56, 0.3, 0.38, 0.47])
@@ -217,8 +220,8 @@ def slides(res, out, example):
     ax.tick_params(labelsize=14); ax.legend(fontsize=14, frameon=False)
     ax.set_title(f"median of 65 cell types x 10 faces; < 5 % for all after {summ['order_effect_gone_after_s']:.1f} s",
                  fontsize=14, color=GREY)
-    fig.text(0.56, 0.17, "Unlike humans, who see the face in a Mooney once they\nhave seen the photo, the fly model "
-             "keeps no trace of it.", fontsize=19, color=BLUE, fontweight="bold", va="top")
+    fig.text(0.555, 0.17, "Unlike humans, who see the face in a Mooney once they\nhave seen the photo, the fly model "
+             "keeps no trace of it.", fontsize=18, color=BLUE, fontweight="bold", va="top")
     paths.append(out / "slide6.png"); fig.savefig(paths[-1]); plt.close(fig)
     return paths
 
