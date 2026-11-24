@@ -421,55 +421,84 @@ def fig_timecourses(S, meta, out, pair):
     fig.savefig(out / f"comparison_5_timecourses_{pair}.png", dpi=170, facecolor="white"); plt.close(fig)
 
 
-def fig_ensemble(files, face, out):
-    rows = []
+KEY_POLARITY = ["Mi1", "Tm3", "CT1(M10)", "Mi4", "L1", "L2", "Mi9", "Tm1", "Tm2", "Tm9"]
+
+
+def fig_ensemble(files, face, out, memory=None):
+    """Robustness in the 10 best models: similarity, contrast, switch polarity, masking, memory over 10 s."""
+    rows, pol = [], []
     for f in files:
         S, meta = load(f)
         r, _ = analyse(S, face)
-        st = settle_time(S)
-        ft = max(fade_time(S["rf_order"]).max(), fade_time(S["mf_order"]).max())
-        reg = {g: np.nanmean([v["r_face"] for v in r.values() if v["region"] == g]) for g in ["retina", "intermediate", "output"]}
-        rows.append(dict(model=meta["model"].split("/")[-1], **{f"r_{g}": reg[g] for g in reg},
-                         r_min=float(np.nanmin([v["r_face"] for v in r.values()])),
+        rows.append(dict(model=meta["model"].split("/")[-1],
                          contrast_ratio=float(np.median([v["contrast_ratio"] for v in r.values()])),
-                         on=float(np.mean([r[t]["r_switch_rgbfirst"] for t in ON_TYPES])),
-                         off=float(np.mean([r[t]["r_switch_rgbfirst"] for t in OFF_TYPES])),
-                         settle_max=float(st.max()), fade_max=float(ft),
                          mask_mp=float(np.nanmedian([v["r_mooney_after_photo"] for v in r.values()])),
                          mask_pm=float(np.nanmedian([v["r_photo_after_mooney"] for v in r.values()])),
-                         final_diff=float(max(S["rf_final_diff"].max(), S["mf_final_diff"].max()))))
-    m = [x["model"] for x in rows]
-    x = np.arange(len(m))
-    fig, axs = plt.subplots(1, 5, figsize=(20, 3.8))
-    ax = axs[0]
-    for g, c in [("retina", "#636363"), ("intermediate", "#e6550d"), ("output", "#3182bd")]:
-        ax.plot(x, [r[f"r_{g}"] for r in rows], "o-", color=c, label=REGION_NAME[g])
-    ax.plot(x, [r["r_min"] for r in rows], "v:", color="k", label="most different cell type")
-    ax.set_ylim(0.5, 1); ax.set_title("photo vs. Mooney similarity", fontweight="bold", fontsize=9)
-    ax.legend(fontsize=7, frameon=False)
-    ax = axs[1]
+                         switch_abs_median=float(np.median([abs(v["r_switch_rgbfirst"]) for v in r.values()])),
+                         polarity={t: round(r[t]["r_switch_rgbfirst"], 3) for t in KEY_POLARITY}))
+        pol.append([r[t]["r_switch_rgbfirst"] for t in KEY_POLARITY])
+    mem = np.load(memory) if memory else None
+    if mem is not None:
+        chk = mem["check"]; mtypes = list(mem["types"]); regions = list(mem["regions"])
+        for row in rows:
+            m = row["model"]
+            o, st, sim = mem[f"order_{m}"], mem[f"settle_{m}"], mem[f"sim10_{m}"]
+            row["order_median"] = dict(zip([f"{c:g}s" for c in chk], np.median(o, axis=(0, 1, 2)).round(4).tolist()))
+            row["order_below_5pct_at_10s"] = float((o[..., -1] < 0.05).mean())
+            row["settle_median_at_2s"] = float(np.median(st[..., 3]))
+            row["sim10"] = {g: float(np.nanmean([np.nanmedian(sim[k]) for k in range(len(mtypes)) if regions[k] == g]))
+                            for g in ["retina", "intermediate", "output"]}
+    models = [r["model"] for r in rows]
+    x = np.arange(len(models))
+    fig, axs = plt.subplots(2, 3, figsize=(18, 9))
+    ax = axs[0, 0]
+    if mem is not None:
+        for g, c in [("retina", "#636363"), ("intermediate", "#e6550d"), ("output", "#3182bd")]:
+            ax.plot(x, [r["sim10"][g] for r in rows], "o-", color=c, label=REGION_NAME[g])
+        ax.axhline(0.92, color="#08519c", ls="--", lw=1, label="input on the fly eye (0.92)")
+    ax.set_ylim(0.3, 1); ax.legend(fontsize=7.5, frameon=False, loc="lower left")
+    ax.set_title("a  photo vs. Mooney similarity of the final state (10 s)", loc="left", fontweight="bold", fontsize=10)
+    ax = axs[0, 1]
     ax.bar(x, [r["contrast_ratio"] for r in rows], color="#756bb1"); ax.axhline(1, color="k", lw=0.8)
-    ax.set_title("Mooney / photo response contrast\n(median over cell types)", fontweight="bold", fontsize=9)
-    ax = axs[2]
-    ax.bar(x - 0.2, [r["on"] for r in rows], 0.4, color="#d7301f", label="ON inputs (Mi1, Tm3, Mi4, CT1(M10))")
-    ax.bar(x + 0.2, [r["off"] for r in rows], 0.4, color="#2b8cbe", label="OFF inputs (Mi9, Tm1, Tm2, Tm9)")
-    ax.axhline(0, color="k", lw=0.8); ax.set_ylim(-1.05, 1.05)
-    ax.set_title("switch transient vs. input change", fontweight="bold", fontsize=9)
-    ax.legend(fontsize=7, frameon=False, loc="lower left")
-    ax = axs[3]
-    ax.plot(x, [r["settle_max"] for r in rows], "o-", color="#08519c", label="settling after onset (2 %)")
-    ax.plot(x, [r["fade_max"] for r in rows], "s-", color="#31a354", label="order effect gone (5 %)")
-    ax.set_ylim(0, 2.0); ax.set_ylabel("s"); ax.set_title("slowest cell type", fontweight="bold", fontsize=9)
-    ax.legend(fontsize=7, frameon=False)
-    ax = axs[4]
-    ax.plot(x, [r["mask_mp"] for r in rows], "o-", color="#31a354", label="Mooney after photo")
-    ax.plot(x, [r["mask_pm"] for r in rows], "s-", color="#756bb1", label="photo after Mooney")
-    ax.set_ylim(0, 1.05); ax.set_title("masking 120 ms after the switch\n(median over cell types)", fontweight="bold",
-                                        fontsize=9)
-    ax.legend(fontsize=7, frameon=False, loc="lower left")
-    for a in axs:
-        a.set_xticks(x); a.set_xticklabels(m, fontsize=8); a.set_xlabel("model (best task performance = 000)")
-    fig.suptitle("Robustness: the same analysis in the 10 best models of the pretrained ensemble", fontweight="bold")
+    ax.set_ylim(0, 2.2)
+    ax.set_title("b  Mooney / photo response contrast (median of 65 types)", loc="left", fontweight="bold", fontsize=10)
+    ax = axs[0, 2]
+    P = np.array(pol).T
+    ax.imshow(P, cmap="RdBu_r", vmin=-1, vmax=1, aspect="auto")
+    for i_ in range(P.shape[0]):
+        for j_ in range(P.shape[1]):
+            ax.text(j_, i_, f"{P[i_, j_]:+.1f}", ha="center", va="center", fontsize=6.5,
+                    color="white" if abs(P[i_, j_]) > 0.6 else "black")
+    ax.set_yticks(range(len(KEY_POLARITY))); ax.set_yticklabels(KEY_POLARITY, fontsize=8)
+    ax.set_title("c  switch response vs. brightness change (+ ON, - OFF)", loc="left", fontweight="bold", fontsize=10)
+    ax = axs[1, 0]
+    ax.plot(x, [r["mask_mp"] for r in rows], "o-", color="#31a354", label="Mooney after photo vs. after grey")
+    ax.plot(x, [r["mask_pm"] for r in rows], "s-", color="#756bb1", label="photo after Mooney vs. after grey")
+    ax.set_ylim(0, 1.05); ax.legend(fontsize=7.5, frameon=False, loc="lower left")
+    ax.set_title("d  masking 120 ms after the switch (median of 65 types)", loc="left", fontweight="bold", fontsize=10)
+    ax = axs[1, 1]
+    if mem is not None:
+        cols = plt.cm.viridis(np.linspace(0, 0.9, len(models)))
+        for k, r in enumerate(rows):
+            y = np.maximum(list(r["order_median"].values()), 1e-4)
+            ax.plot(chk, y * 100, "o-", color="#d7301f" if k == 0 else cols[k], lw=2.5 if k == 0 else 1.2,
+                    label=r["model"], zorder=3 if k == 0 else 2)
+        ax.axhline(5, color="0.4", ls="--", lw=0.8)
+        ax.set_xscale("log"); ax.set_yscale("log"); ax.set_ylim(0.01, 200)
+        ax.set_xlabel("time after the switch (s)"); ax.set_ylabel("effect of the previous image (%)")
+        ax.legend(fontsize=7, frameon=False, ncol=2, title="model", title_fontsize=7)
+    ax.set_title("e  memory: median over types, pairs and both orders", loc="left", fontweight="bold", fontsize=10)
+    ax = axs[1, 2]
+    if mem is not None:
+        ax.bar(x, [100 * (1 - r["order_below_5pct_at_10s"]) for r in rows], color="#d7301f")
+        ax.set_ylim(0, 100)
+    ax.set_ylabel("% of cell types x pairs")
+    ax.set_title("f  previous image still > 5 % after 10 s", loc="left", fontweight="bold", fontsize=10)
+    for a in [axs[0, 0], axs[0, 1], axs[0, 2], axs[1, 0], axs[1, 2]]:
+        a.set_xticks(x); a.set_xticklabels(models, fontsize=8)
+        a.set_xlabel("model (000 = best task performance)")
+    fig.suptitle("Robustness in the 10 best models of the pretrained ensemble (deliverables: model 000)",
+                 fontweight="bold")
     fig.tight_layout()
     fig.savefig(out / "comparison_6_ensemble_robustness.png", dpi=170, facecolor="white"); plt.close(fig)
     return rows
@@ -479,6 +508,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sim", default=str(C.ROOT / "work/part2/sim_000.npz"))
     ap.add_argument("--ensemble", nargs="*", default=[])
+    ap.add_argument("--memory", default=None, help="memory_check.npz (10-s presentations, 10 models)")
     ap.add_argument("--out", default=str(C.ROOT / "work/part2/Results"))
     ap.add_argument("--example", default="face_033")
     ap.add_argument("--workers", type=int, default=3)
@@ -504,7 +534,7 @@ def main():
     fig_timecourses(S, meta, comp, a.example)
     fig_masking(rows, comp)
     fig_pairs(S, meta, comp, gray, moon)
-    ens = fig_ensemble(a.ensemble, face, comp) if a.ensemble else []
+    ens = fig_ensemble(a.ensemble, face, comp, a.memory) if a.ensemble else []
     reg = {g: float(np.nanmean([v["r_face"] for v in rows.values() if v["region"] == g])) for g in ["retina", "intermediate", "output"]}
     order = sorted(rows, key=lambda t: rows[t]["r_face"])
     summary = dict(

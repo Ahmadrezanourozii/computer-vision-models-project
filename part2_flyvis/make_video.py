@@ -6,8 +6,9 @@
 Builds five 1920x1080 slides (findings only), the narration script, a PowerPoint file with the slides
 and the script in the speaker notes (to record your own voice in PowerPoint: Record -> Export -> MP4),
 and an MP4 (H.264 High / yuv420p + AAC 48 kHz, 'faststart', plays in VLC) of exactly --duration seconds.
-Audio: --audio (your own recording, one file for the whole video) or --voice (local Piper text-to-speech
-draft, run with the 'tts' virtual environment's python via --piper-python).
+Audio: --audio (your own recordings, one file per slide in slide order; wav, m4a, mp3, ... are converted
+with ffmpeg) or --voice (local Piper text-to-speech draft, run with the 'tts' virtual environment's python via
+--piper-python).
 """
 import argparse
 import json
@@ -24,16 +25,18 @@ from matplotlib.patches import FancyArrowPatch  # noqa: E402
 from PIL import Image  # noqa: E402
 
 import common as C  # noqa: E402
+import flyvis.analysis.visualization  # noqa: E402,F401  (loads flyvis' matplotlibrc; overridden below)
 
 BLUE, INK, GREY, MOON, PHOTO = "#04316A", "#1A1A1A", "#6B7680", "#04316A", "#8C9FB1"
-plt.rcParams.update({"font.family": "Liberation Sans", "font.size": 20, "axes.edgecolor": "#444444"})
+plt.rcParams.update({"font.family": "Liberation Sans", "font.size": 20, "axes.edgecolor": "#444444",
+                     "figure.dpi": 100, "savefig.dpi": 100, "savefig.bbox": "standard", "legend.fontsize": 14})
 W, H = 19.2, 10.8           # inches at dpi 100 -> 1920 x 1080
 FOOT = "Ahmadreza Nourozi  |  Computational Visual Perception, Project Part 2  |  FAU Erlangen-Nürnberg"
 
 # narration: findings only (what we observed), ~140 words for one minute
 SCRIPT = [
     ("How does a fly's visual system see a Mooney face? We showed our ten faces and their Mooney images to the "
-     "connectome-constrained fly model, each as a static video."),
+     "connectome-constrained fly model."),
     ("First: to the fly eye, a Mooney is almost the photo. Its seven hundred and twenty-one ommatidia blur the "
      "details, so inputs and responses correlate at about zero point nine."),
     ("Second: the hard black and white of the Mooney drives the network harder, with about one point seven times "
@@ -42,8 +45,8 @@ SCRIPT = [
      "Mi9 and Tm9 where it got darker."),
     ("As the Mooney exaggerates the photo, the Mooney pops out after the photo, but the photo is masked after "
      "the Mooney."),
-    ("Fourth: this fades within one second, then the activity equals the second image alone. Unlike humans, the "
-     "fly model keeps no memory of the photo."),
+    ("Fourth: in the best model this fades within one second; then the activity equals the second image alone. "
+     "But four of the ten best models keep a trace beyond ten seconds, a time scale training never constrained."),
 ]
 # how the text-to-speech engine should pronounce cell-type names
 TTS_FIX = {"Mi1": "M I one", "Tm3": "T M three", "Mi9": "M I nine", "Tm9": "T M nine", "ON cells": "On cells",
@@ -106,7 +109,7 @@ def slides(res, out, example):
     fig.text(0.755, 0.15, "721 ommatidia (one grey value each)", fontsize=16, color=GREY, ha="center")
     fig.text(0.04, 0.085, "Ahmadreza Nourozi  |  M.Sc. Artificial Intelligence  |  student no. 23726011",
              fontsize=16, color=INK)
-    paths.append(out / "slide1.png"); fig.savefig(paths[-1]); plt.close(fig)
+    paths.append(out / "slide1.png"); fig.savefig(paths[-1], dpi=100, bbox_inches=None); plt.close(fig)
 
     # 2 ------------------------------------------------------------------ similarity
     fig = slide_base("1   To the fly eye, a Mooney is almost the photo", 2)
@@ -133,8 +136,10 @@ def slides(res, out, example):
     ax.set_ylim(0.6, 1.0); ax.set_ylabel("photo vs. Mooney response similarity (r)", fontsize=17)
     ax.tick_params(axis="y", labelsize=15); ax.set_xlim(-0.5, 2.9)
     ax.spines[["top", "right"]].set_visible(False)
-    ax.set_title("responses after 2 s (steady state); line = range over cell types", fontsize=16, color=GREY)
-    paths.append(out / "slide2.png"); fig.savefig(paths[-1]); plt.close(fig)
+    ax.set_title("best model, responses after 2 s (steady state); line = range over cell types", fontsize=15, color=GREY)
+    fig.text(0.05, 0.2, "other 9 of the 10 best models:\nresponses 0.7-0.9 (one unstable model lower)", fontsize=15,
+             color=GREY, va="top")
+    paths.append(out / "slide2.png"); fig.savefig(paths[-1], dpi=100, bbox_inches=None); plt.close(fig)
 
     # 3 ------------------------------------------------------------------ stronger responses
     fig = slide_base("2   The Mooney drives the network harder", 3)
@@ -148,9 +153,10 @@ def slides(res, out, example):
     fig.text(0.77, 0.62, f"x {summ['contrast_ratio_median']:.1f}", fontsize=80, fontweight="bold", color=BLUE)
     fig.text(0.77, 0.55, "stronger response pattern\nfor the Mooney\n(median of 65 cell types,\n10 faces)",
              fontsize=19, color=INK, va="top")
-    fig.text(0.77, 0.25, "each panel: one cell type\n(black = low, white = high\nvoltage, same scale in\nboth rows)",
-             fontsize=15, color=GREY, va="top")
-    paths.append(out / "slide3.png"); fig.savefig(paths[-1]); plt.close(fig)
+    fig.text(0.77, 0.33, "x 1.6 to x 2.0 in all of the\n10 best models", fontsize=17, color=BLUE, va="top")
+    fig.text(0.77, 0.22, "each panel: one cell type\n(black = low, white = high\nvoltage, same scale in\nboth rows)",
+             fontsize=14, color=GREY, va="top")
+    paths.append(out / "slide3.png"); fig.savefig(paths[-1], dpi=100, bbox_inches=None); plt.close(fig)
 
     # 4 ------------------------------------------------------------------ switch transient
     fig = slide_base("3   After a switch, ON and OFF cells signal what changed", 4)
@@ -158,9 +164,11 @@ def slides(res, out, example):
     im = im.crop((0, int(im.height * 0.05), im.width, int(im.height * 0.95)))
     add_img(fig, np.asarray(im), [0.03, 0.1, 0.94, 0.72])
     on = summ["switch_on"]; off = summ["switch_off"]
-    fig.text(0.5, 0.075, f"correlation with the brightness change (10 faces):  Mi1 {on['Mi1']:+.2f}   Tm3 {on['Tm3']:+.2f}"
-             f"   |   Mi9 {off['Mi9']:+.2f}   Tm9 {off['Tm9']:+.2f}", fontsize=17, color=INK, ha="center")
-    paths.append(out / "slide4.png"); fig.savefig(paths[-1]); plt.close(fig)
+    fig.text(0.5, 0.085, f"best model, correlation with the brightness change (10 faces):  Mi1 {on['Mi1']:+.2f}   "
+             f"Tm3 {on['Tm3']:+.2f}   |   Mi9 {off['Mi9']:+.2f}   Tm9 {off['Tm9']:+.2f}", fontsize=17, color=INK, ha="center")
+    fig.text(0.5, 0.055, "10 best models: Mi1 and Tm3 are ON in all; OFF types (Mi9, Tm1, Tm2, Tm9) flip in 2-3 models, "
+             "like the Mi4/Mi9 clusters in the paper's Fig. 3", fontsize=14, color=GREY, ha="center")
+    paths.append(out / "slide4.png"); fig.savefig(paths[-1], dpi=100, bbox_inches=None); plt.close(fig)
 
     # 5 ------------------------------------------------------------------ masking asymmetry
     fig = slide_base("3   ... so the Mooney pops out, and the photo is masked", 5)
@@ -184,12 +192,13 @@ def slides(res, out, example):
     fig.text(0.72, 0.42, f"r = {summ['masking_photo_after_mooney_median']:.2f}", fontsize=50, fontweight="bold",
              color="#756bb1")
     fig.text(0.72, 0.36, "photo after the Mooney\nvs. photo after grey", fontsize=18, color=INK, va="top")
-    fig.text(0.72, 0.2, f"median of 65 cell types, 10 faces\n(Mi1: {summ['masking_examples']['Mi1'][1]:.2f}, "
-             f"Tm3: {summ['masking_examples']['Tm3'][1]:.2f})", fontsize=15, color=GREY, va="top")
-    paths.append(out / "slide5.png"); fig.savefig(paths[-1]); plt.close(fig)
+    fig.text(0.72, 0.21, f"best model, median of 65 cell types, 10 faces\n(Mi1: {summ['masking_examples']['Mi1'][1]:.2f}, "
+             f"Tm3: {summ['masking_examples']['Tm3'][1]:.2f}). Same asymmetry in\nall 10 best models "
+             f"(0.91-0.99 vs. 0.41-0.75)", fontsize=14, color=GREY, va="top")
+    paths.append(out / "slide5.png"); fig.savefig(paths[-1], dpi=100, bbox_inches=None); plt.close(fig)
 
     # 6 ------------------------------------------------------------------ no memory
-    fig = slide_base("4   The previous image is forgotten within one second", 6)
+    fig = slide_base("4   Memory of the previous image depends on the model", 6)
     t2 = np.arange(1, 2 * C.N_STIM + 1) * C.DT
     t1 = t2[:C.N_STIM]
     types = meta["cell_types"]
@@ -209,24 +218,35 @@ def slides(res, out, example):
                       handlelength=1.6, columnspacing=1.0)
         else:
             ax.set_xlabel("time (s); switch at 2 s", fontsize=16)
-    ax = fig.add_axes([0.56, 0.3, 0.38, 0.47])
-    tt = np.arange(1, C.N_STIM + 1) * C.DT
-    for key, col, lab in [("rf_order", "#31a354", "Mooney after photo"), ("mf_order", "#756bb1", "photo after Mooney")]:
-        y = S[key].reshape(-1, S[key].shape[-1])
-        ax.plot(tt, np.median(y, 0) * 100, color=col, lw=3, label=lab)
+    ax = fig.add_axes([0.58, 0.33, 0.37, 0.44])
+    mem = np.load(res.parent / "memory_check.npz")
+    chk = mem["check"]
+    for k, m in enumerate(mem["models"]):
+        y = np.maximum(np.median(mem[f"order_{m}"], axis=(0, 1, 2)), 1e-4) * 100
+        best = k == 0
+        ax.plot(chk, y, "o-", color="#d7301f" if best else "#9aa5b1", lw=3.2 if best else 1.4, ms=5 if best else 3,
+                zorder=3 if best else 2, label="best model" if best else ("other 9 models" if k == 1 else None))
     ax.axhline(5, color=GREY, ls="--", lw=1.2)
-    ax.set_xlim(0, 2); ax.set_ylim(0, 130); ax.spines[["top", "right"]].set_visible(False)
+    ax.set_xscale("log"); ax.set_yscale("log"); ax.set_ylim(0.01, 200)
+    ax.set_xticks([0.12, 0.5, 1, 2, 5, 10]); ax.set_xticklabels(["0.12", "0.5", "1", "2", "5", "10"])
+    ax.spines[["top", "right"]].set_visible(False)
     ax.set_xlabel("time after the switch (s)", fontsize=16); ax.set_ylabel("effect of the previous image (%)", fontsize=16)
-    ax.tick_params(labelsize=14); ax.legend(fontsize=14, frameon=False)
-    ax.set_title(f"median of 65 cell types x 10 faces; < 5 % for all after {summ['order_effect_gone_after_s']:.1f} s",
-                 fontsize=14, color=GREY)
-    fig.text(0.555, 0.17, "Unlike humans, who see the face in a Mooney once they\nhave seen the photo, the fly model "
-             "keeps no trace of it.", fontsize=18, color=BLUE, fontweight="bold", va="top")
-    paths.append(out / "slide6.png"); fig.savefig(paths[-1]); plt.close(fig)
+    ax.tick_params(labelsize=14); ax.legend(fontsize=14, frameon=False, loc="lower left")
+    ax.set_title("median over 65 cell types, 10 faces, both orders", fontsize=14, color=GREY)
+    fig.text(0.58, 0.2, "Best model: no trace after 1 s.\nFour of the 10 best models keep a trace for > 10 s:\n"
+             "the 0.4-s training clips never constrained such slow dynamics.", fontsize=16, color=BLUE,
+             fontweight="bold", va="top")
+    paths.append(out / "slide6.png"); fig.savefig(paths[-1], dpi=100, bbox_inches=None); plt.close(fig)
     return paths
 
 
 def wav_read(p):
+    p = Path(p)
+    if p.suffix.lower() != ".wav":                       # phone recordings (m4a, mp3, ...) -> 48 kHz mono wav
+        q = p.with_suffix(".converted.wav")
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(p), "-ac", "1", "-ar", "48000", str(q)],
+                       check=True)
+        p = q
     with wave.open(str(p)) as w:
         sr, n, ch = w.getframerate(), w.getnframes(), w.getnchannels()
         x = np.frombuffer(w.readframes(n), np.int16).astype(np.float32) / 32768
@@ -308,7 +328,7 @@ def main():
     ap.add_argument("--voice", default=None, help="Piper voice (.onnx) for a text-to-speech draft")
     ap.add_argument("--piper-python", default="/root/venvs/tts/bin/python")
     ap.add_argument("--length-scale", type=float, default=1.0)
-    ap.add_argument("--audio", nargs="*", default=None, help="own recordings: one wav per slide")
+    ap.add_argument("--audio", nargs="*", default=None, help="own recordings: one audio file per slide, in order")
     ap.add_argument("--duration", type=float, default=59.5)
     ap.add_argument("--name", default="Nourozi_23726011_CompVP_Part2_findings.mp4")
     a = ap.parse_args()

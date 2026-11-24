@@ -1,0 +1,11 @@
+Slide 1: How does a fly's visual system see a Mooney face? We showed our ten faces and their Mooney images to the connectome-constrained fly model.
+
+Slide 2: First: to the fly eye, a Mooney is almost the photo. Its seven hundred and twenty-one ommatidia blur the details, so inputs and responses correlate at about zero point nine.
+
+Slide 3: Second: the hard black and white of the Mooney drives the network harder, with about one point seven times stronger response patterns.
+
+Slide 4: Third: after a switch, ON cells like Mi1 and Tm3 depolarize where the image got brighter, OFF cells like Mi9 and Tm9 where it got darker.
+
+Slide 5: As the Mooney exaggerates the photo, the Mooney pops out after the photo, but the photo is masked after the Mooney.
+
+Slide 6: Fourth: in the best model this fades within one second; then the activity equals the second image alone. But four of the ten best models keep a trace beyond ten seconds, a time scale training never constrained.

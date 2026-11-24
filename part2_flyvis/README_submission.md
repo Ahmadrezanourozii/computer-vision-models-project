@@ -50,21 +50,30 @@ T-shaped and transmedullary cells), black = low and white = high membrane voltag
 type is shared by all 20 `SteadyState` figures, and by all 40 `RGBFirst` + `MooneyFirst` figures, so the
 figures can be compared with each other.
 
-## Findings (qualitative, best model; same pattern in the 10 best models)
+## Findings (qualitative; best model 000, robustness in the 10 best models)
 
 1. **To the fly eye a Mooney is almost the photo.** Inside the face the photoreceptor inputs of photo and
-   Mooney correlate at r = 0.92 (the same two images at full resolution: 0.85). The network keeps them about
-   as similar (steady state: retina 0.92, lamina/medulla 0.92, T-shaped/transmedullary 0.90); the most
-   different cell types are TmY18 (0.76), Tm20 (0.80) and T4d (0.85).
+   Mooney correlate at r = 0.92 (the same two images at full resolution: 0.85). In the best model the responses
+   stay about as similar (steady state: retina 0.92, lamina/medulla 0.92, T-shaped/transmedullary 0.90; most
+   different: TmY18 0.76, Tm20 0.80, T4d 0.85). In the other models 0.7-0.9 (lower in model 004, which never settles).
 2. **The Mooney drives the network harder.** Its steady-state response patterns are about 1.7 times stronger
-   (median over the 65 cell types), following its higher black/white contrast.
+   (median over the 65 cell types; 1.6-2.0 in all 10 models), following its higher black/white contrast.
 3. **After a switch, ON and OFF cells signal what changed.** 120 ms after one image replaces the other,
    ON cells follow the brightness change (Mi1 +0.98, Tm3 +0.89, Mi4 +0.97, CT1(M10) +0.99) and OFF cells invert it
-   (Mi9 -0.99, Tm2 -0.96, Tm9 -1.00); swapping the order flips the sign. In this phase the new image is
-   partly masked by the old one.
-4. **No memory.** The effect of the previous image falls below 5 % for every cell type within 0.9 s; then the
-   activity is the same as for the second image alone. Unlike human observers, who keep seeing the face in a
-   Mooney after seeing the photo, the fly model keeps no trace of the photo.
+   (Mi9 -0.99, Tm2 -0.96, Tm9 -1.00); swapping the order flips the sign. In all 10 models Mi1, Tm3 and CT1(M10)
+   are ON; the OFF types flip in 2-3 models (compare the Mi4/Mi9 clusters in Fig. 3 of the paper).
+4. **Asymmetric masking.** The Mooney exaggerates the contrast of the photo, so the change photo -> Mooney looks
+   like the Mooney itself: the Mooney after the photo is represented as after grey (median r = 0.99), while the
+   photo after the Mooney is masked (median r = 0.75; below 0.5 in 18 of 65 cell types, e.g. Mi1 0.33, Tm3 0.30).
+   Same asymmetry in all 10 models (0.91-0.99 vs. 0.41-0.75).
+5. **Memory depends on the model.** In the best model the previous image is forgotten within one second (effect
+   below 5 % for every cell type after 0.9 s; 2 s after the switch the activity equals the second image alone,
+   difference at most 0.12 %), so it keeps no trace of the photo, unlike human observers, who keep seeing the
+   face in a Mooney once they have seen the photo. Over 10-s presentations, models 001 and 005 also forget within
+   1-2 s and 002 and 007 within 5-10 s, while in 004, 006, 008 and 009 part of the network keeps a trace for
+   more than 10 s (004 does not settle under a static image at all). The optic-flow task (0.4-s training clips)
+   does not constrain dynamics this slow. The timing above was chosen for the best model; the slower models would
+   need presentations of 5-10 s.
 
 ## Comparison figures (`Results/Comparisons/`)
 
@@ -73,8 +82,13 @@ figures can be compared with each other.
 * `comparison_3_switch_transient_face_033.png`, `comparison_3_switch_polarity_by_cell_type.png`: ON/OFF
   responses to the switch
 * `comparison_5_timecourses_face_033.png`: central-cell responses in all conditions (as in tutorial 7)
-* `comparison_6_ensemble_robustness.png`: the same measures in the 10 best models
+* `comparison_4_masking_by_cell_type.png`: masking of the new image right after the switch, per cell type
+* `comparison_6_ensemble_robustness.png`: the same measures in the 10 best models, incl. 10-s presentations
 * `per_pair/face_XXX.png`: selected cell types of every pair in all conditions
 * `summary.json`: all numbers quoted above
 
-Code: `part2_flyvis/` of the project repository (`simulate.py`, `make_figures.py`, `make_video.py`).
+Code: `part2_flyvis/` of the project repository (`simulate.py`, `memory_check.py`, `make_figures.py`,
+`make_video.py`, `make_submission.py`).
+
+AI assistance: as in Part 1, Claude (Anthropic) was used as a coding and writing assistant for this part
+(simulation and figure scripts, video script).
